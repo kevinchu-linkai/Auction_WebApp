@@ -244,12 +244,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['launch'])) {
         if (!mysqli_stmt_execute($insAuction)) {
           $error = 'Database error inserting auction: ' . mysqli_error($connection);
         } else {
-          $success = 'Auction created successfully.';
+          // Show on-page success message and then auto-redirect after short delay
+          $success = 'Auction created successfully. Redirecting to listings...';
           mysqli_stmt_close($insAuction);
-            // clear multi-step session data on successful creation
-            unset($_SESSION[$sessionKey]);
-          header('Location: browse.php?created=1');
-          exit();
+          // clear multi-step session data on successful creation
+          unset($_SESSION[$sessionKey]);
+          $shouldRedirect = true;
+          $redirectUrl = 'browse.php?created=1';
         }
       } else {
         if ($error === '') $error = 'Database error preparing auction insert.';
@@ -283,6 +284,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['launch'])) {
     <div class="mb-6 p-3 rounded border border-green-200 bg-green-50 text-green-700">
       <?php echo htmlspecialchars($success); ?>
     </div>
+  <?php endif; ?>
+  <?php if (!empty($shouldRedirect) && !empty($redirectUrl)): ?>
+    <script>
+      // Auto-redirect after a short delay so user sees the success message
+      setTimeout(function () {
+        window.location.href = '<?php echo htmlspecialchars($redirectUrl); ?>';
+      }, 2000);
+    </script>
   <?php endif; ?>
 
   <!-- Progress Steps -->
