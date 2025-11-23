@@ -1,22 +1,31 @@
 <?php
   session_start();
 
-  // Read flash messages and previous inputs from session (set by process_registration.php)
-  $success = $_SESSION['reg_success'] ?? false;
-  $successMessage = $_SESSION['reg_success_msg'] ?? '';
-  $error = $_SESSION['reg_error'] ?? '';
-  $old = $_SESSION['reg_old'] ?? [];
+    // Read flash messages and previous inputs from session (set by process_registration.php)
+    $success = $_SESSION['reg_success'] ?? false;
+    $successMessage = $_SESSION['reg_success_msg'] ?? '';
+    $error = $_SESSION['reg_error'] ?? '';
+    $old = $_SESSION['reg_old'] ?? [];
+    $regRedirect = $_SESSION['reg_redirect'] ?? null;
 
-  // Clear flashes
-  unset($_SESSION['reg_success'], $_SESSION['reg_success_msg'], $_SESSION['reg_error'], $_SESSION['reg_old']);
+    // Clear flashes. Preserve `reg_old` if registration just succeeded so the
+    // page continues to show the filled fields while the success message is
+    // visible. Clear `reg_old` only when there's no recent success.
+    if ($success) {
+      unset($_SESSION['reg_success'], $_SESSION['reg_success_msg'], $_SESSION['reg_error'], $_SESSION['reg_redirect']);
+    } else {
+      unset($_SESSION['reg_success'], $_SESSION['reg_success_msg'], $_SESSION['reg_error'], $_SESSION['reg_old'], $_SESSION['reg_redirect']);
+    }
 
   // Selected user type (buyer/seller)
-  $selectedType = $old['userType'] ?? ($_POST['userType'] ?? 'buyer');
+  // Prefer session 'old' inputs, then POST (selection change), then GET (link to specific signup), default to 'buyer'.
+  $selectedType = $old['userType'] ?? ($_POST['userType'] ?? ($_GET['userType'] ?? 'buyer'));
 
-  // If registration succeeded, send a Refresh header to redirect to login after a short delay.
-  if (!empty($success)) {
-      header('Refresh: 3; url=login.php');
-  }
+    // If registration succeeded, send a Refresh header to redirect to login after a short delay.
+    if (!empty($success)) {
+      $target = $regRedirect ?? 'login.php';
+      header('Refresh: 3; url=' . $target);
+    }
 
   // Form data (prefer old inputs from session)
   $username = $old['username'] ?? ($_POST['username'] ?? '');
@@ -199,7 +208,7 @@
 
       <div class="mt-6 text-center text-gray-600">
         Already have an account?
-        <a href="login.php" class="text-blue-600 hover:text-blue-700">Sign in</a>
+        <a href="login.php?userType=<?php echo urlencode($selectedType); ?>" class="text-blue-600 hover:text-blue-700">Sign in</a>
       </div>
     </form>
   </div>

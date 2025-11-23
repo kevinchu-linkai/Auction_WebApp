@@ -98,9 +98,28 @@ if ($ok) {
     $_SESSION['reg_success'] = true;
     // Simplified message to avoid duplicate UI elements on the register page
     $_SESSION['reg_success_msg'] = 'Account created successfully.';
-    // Clear old input on success
-    unset($_SESSION['reg_old']);
-    header('Location: register.php');
+    // Preserve old input (username/email) so the register page can show the
+    // filled-in fields while displaying the success message before redirect.
+    $_SESSION['reg_old'] = [
+        'userType' => $userType,
+        'username' => $username,
+        'email' => $email,
+        'terms' => $terms,
+    ];
+    // Redirect target depends on user type (send user to appropriate login)
+    $target = 'login.php';
+    if ($userType === 'seller') {
+        $target .= '?userType=seller';
+        // Make the intermediate register reload keep seller selected
+        $registerLocation = 'register.php?userType=seller';
+    } else {
+        $target .= '?userType=buyer';
+        $registerLocation = 'register.php?userType=buyer';
+    }
+    $_SESSION['reg_redirect'] = $target;
+    // Redirect back to register page but include userType so the seller/buyer
+    // selection remains visible while the success message shows.
+    header('Location: ' . $registerLocation);
     exit;
 } else {
     $_SESSION['reg_error'] = 'Failed to create account (database error).';
