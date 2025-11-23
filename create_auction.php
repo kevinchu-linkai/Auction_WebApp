@@ -456,7 +456,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['launch'])) {
         <?php endif; ?>
 
         <div class="flex justify-between pt-4">
-          <button type="submit" onclick="goStep(1)"
+          <button type="button" onclick="submitStep(1, false)"
             class="px-8 py-3 bg-gray-100 text-gray-700 rounded-xl">Back</button>
           <button type="submit" onclick="goStep(3)"
             class="px-8 py-3 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-xl">
@@ -514,7 +514,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['launch'])) {
           class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl">
 
         <div class="flex justify-between pt-6 border-t border-gray-200">
-          <button type="submit" onclick="goStep(2)"
+          <button type="button" onclick="submitStep(2, false)"
             class="px-8 py-3 bg-gray-100 text-gray-700 rounded-xl">Back</button>
             <button type="submit" name="launch" value="1"
               class="px-8 py-3 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-xl">
@@ -533,22 +533,75 @@ function goStep(step) {
   document.getElementById("currentStep").value = step;
 }
 
+// Submit the form for step navigation. If `validate` is false,
+// disable HTML5 validation so users can go Back without filling
+// required fields on the current step.
+function submitStep(step, validate = true) {
+  document.getElementById("currentStep").value = step;
+  const form = document.querySelector('form');
+  if (!validate) form.noValidate = true;
+  form.submit();
+}
+
 const input = document.getElementById("imageInput");
 const previewContainer = document.getElementById("imagePreviewContainer");
 
 if (input) {
-  input.addEventListener("change", () => {
+  input.addEventListener('change', () => {
     // clear previous preview
     previewContainer.innerHTML = '';
     const file = input.files[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
-    const div = document.createElement("div");
-    div.className = "relative w-36 h-36 md:w-40 md:h-40";
-    div.innerHTML = `
+
+    // container for image + controls
+    const wrapper = document.createElement('div');
+    wrapper.className = 'flex flex-col items-start';
+
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'relative w-36 h-36 md:w-40 md:h-40';
+    imgWrap.innerHTML = `
       <img src="${url}" class="w-full h-full object-cover rounded-xl border-2 border-gray-200" />
     `;
-    previewContainer.appendChild(div);
+
+    // controls: Replace + Delete
+    const controls = document.createElement('div');
+    controls.className = 'mt-2 flex items-center gap-2';
+
+    const replaceBtn = document.createElement('button');
+    replaceBtn.type = 'button';
+    replaceBtn.className = 'px-3 py-1 bg-gray-100 text-gray-700 rounded-xl';
+    replaceBtn.textContent = 'Replace';
+    replaceBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      // trigger file chooser
+      input.click();
+    });
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'px-3 py-1 bg-red-50 text-red-700 rounded-xl';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      // clear preview and file input
+      previewContainer.innerHTML = '';
+      try { input.value = ''; } catch (err) { /* ignore */ }
+      // show add area again if present
+      const addArea = document.getElementById('addPhotoArea');
+      if (addArea) addArea.style.display = '';
+      // revoke object URL
+      URL.revokeObjectURL(url);
+    });
+
+    controls.appendChild(replaceBtn);
+    controls.appendChild(deleteBtn);
+
+    wrapper.appendChild(imgWrap);
+    wrapper.appendChild(controls);
+
+    previewContainer.appendChild(wrapper);
+
     // hide add area if present
     const addArea = document.getElementById('addPhotoArea');
     if (addArea) addArea.style.display = 'none';
