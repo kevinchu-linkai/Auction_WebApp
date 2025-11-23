@@ -41,7 +41,7 @@ CREATE TABLE Category (\
 CREATE TABLE Item (\
     itemId INT AUTO_INCREMENT PRIMARY KEY,\
     name VARCHAR(50) UNIQUE NOT NULL,\
-    `condition` ENUM('new', 'used-like new', 'used-good', 'used-fair') NOT NULL,\
+    `condition` ENUM('New', 'Like new', 'Excellent', 'Good','Fair', 'Poor') NOT NULL,\
     description TEXT NOT NULL,\
     photo VARCHAR(255),\
    	categoryId INT NOT NULL,\
@@ -59,7 +59,7 @@ CREATE TABLE Auction (\
     reservePrice DECIMAL(10,2),\
     startDate DATETIME NOT NULL,\
     endDate DATETIME NOT NULL,\
-    state ENUM('ongoing','finished','cancelled', 'expired') DEFAULT 'ongoing',\
+    state ENUM('not-started','ongoing','finished','cancelled', 'expired') DEFAULT 'not-started',\
     finalPrice DECIMAL(10,2),\
 \
     FOREIGN KEY (sellerId)\
@@ -122,4 +122,16 @@ CREATE TABLE Review (\
         REFERENCES Seller(sellerId)\
         ON UPDATE CASCADE\
         ON DELETE RESTRICT\
-);}
+);\
+ALTER TABLE Category AUTO_INCREMENT = 1;\
+\
+INSERT INTO Category (name) VALUES\
+('Electronics'),\
+('Fashion'),\
+('Home & Garden'),\
+('Sports'),\
+('Collectibles'),\
+('Automotive'),\
+('Books'),\
+('Jewelry');\
+}
