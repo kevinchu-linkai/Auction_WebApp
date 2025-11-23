@@ -4,11 +4,10 @@
     // Start session so we can read/write `$_SESSION` for login state
     if (session_status() === PHP_SESSION_NONE) session_start();
 
-    // Determine selected type (default = buyer)
-  $selectedType = $_POST['userType'] ?? 'buyer';
-  $username = $_POST['username'] ?? '';
-  $email = $_POST['email'] ?? '';
-  $password = $_POST['password'] ?? '';
+        // Determine selected type (default = buyer)
+    $selectedType = $_POST['userType'] ?? 'buyer';
+    $email = $_POST['email'] ?? '';
+    $password = $_POST['password'] ?? '';
 
   // Handle login submission
   if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -139,22 +138,6 @@ $error ?? null)) : ?>
                 <span>Seller</span>
             </button>
 
-            </div>
-        </div>
-
-        <!-- Username Input -->
-        <div>
-            <label class="block text-gray-700 mb-2">Username</label>
-            <div class="relative">
-            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">👤</span>
-            <input
-                type="username"
-                name="username"
-                value="<?php echo htmlspecialchars($username); ?>"
-                placeholder="Enter your username"
-                class="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                required
-            />
             </div>
         </div>
 
