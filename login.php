@@ -1,84 +1,17 @@
 
 <?php
+// Use sessions and read any flash/errors set by `login_result.php`
+if (session_status() === PHP_SESSION_NONE) session_start();
 
-    // Start session so we can read/write `$_SESSION` for login state
-    if (session_status() === PHP_SESSION_NONE) session_start();
+// Read flash error and old input
+$error = $_SESSION['login_error'] ?? null;
+$old = $_SESSION['login_old'] ?? [];
+unset($_SESSION['login_error'], $_SESSION['login_old']);
 
-        // Determine selected type (default = buyer)
-    $selectedType = $_POST['userType'] ?? 'buyer';
-    $email = $_POST['email'] ?? '';
-    $password = $_POST['password'] ?? '';
-
-  // Handle login submission
-  if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        // If userType was submitted from the tiles but the main login button
-        // wasn't clicked, treat this as a selection change and skip validation.
-        $isSelectionOnly = isset($_POST['userType']) && !isset($_POST['login']);
-
-        if ($isSelectionOnly) {
-            // selection-only POST; $selectedType already set from POST above
-        }
-        else {
-        // Connect to DB and validate credentials
-        require_once 'database.php';
-
-        $error = null;
-        $email = trim($email);
-
-        if (empty($email) || empty($password)) {
-            $error = 'Please enter email and password.';
-        } else {
-            if ($selectedType === 'buyer') {
-                $stmt = mysqli_prepare($connection, "SELECT buyerId, username, password FROM Buyer WHERE email = ? LIMIT 1");
-            } else {
-                $stmt = mysqli_prepare($connection, "SELECT sellerId, username, password FROM Seller WHERE email = ? LIMIT 1");
-            }
-
-            if ($stmt) {
-                mysqli_stmt_bind_param($stmt, 's', $email);
-                mysqli_stmt_execute($stmt);
-                mysqli_stmt_store_result($stmt);
-                if (mysqli_stmt_num_rows($stmt) === 1) {
-                    mysqli_stmt_bind_result($stmt, $id, $dbUsername, $dbPass);
-                    mysqli_stmt_fetch($stmt);
-
-                    // Support both hashed and plain-text passwords (try password_verify first)
-                    $passwordOK = false;
-                    if (password_verify($password, $dbPass)) {
-                        $passwordOK = true;
-                    } elseif ($password === $dbPass) {
-                        $passwordOK = true;
-                    }
-
-                    if ($passwordOK) {
-                        // Successful login: set session and redirect
-                        session_regenerate_id(true);
-                        $_SESSION['logged_in'] = true;
-                        $_SESSION['account_type'] = $selectedType;
-                        $_SESSION['user_id'] = $id;
-                        $_SESSION['username'] = $dbUsername;
-
-                        // Redirect to appropriate dashboard
-                        if ($selectedType === 'buyer') {
-                            header('Location: browse.php');
-                            exit();
-                        } else {
-                            header('Location: browse.php');
-                            exit();
-                        }
-                    } else {
-                        $error = 'Invalid email or password.';
-                    }
-                } else {
-                    $error = 'No account found with that email.';
-                }
-                mysqli_stmt_close($stmt);
-            } else {
-                $error = 'Database error (prepare failed).';
-            }
-        }
-        }
-  }
+// Determine selected type and prefill email from old input if available
+// Prefer session-old, then POST (selection), then GET (link param), default to 'buyer'
+$selectedType = $old['userType'] ?? ($_POST['userType'] ?? ($_GET['userType'] ?? 'buyer'));
+$email = $old['email'] ?? ($_POST['email'] ?? '');
 ?>
 
 <!-- Load Tailwind (kept in body because header already includes Bootstrap) -->
@@ -97,18 +30,16 @@
         <p class="text-gray-600">Sign in to your account</p>
     </div>
 
-    <!-- Login Card -->
+        <!-- Login Card -->
     <div class="bg-white rounded-2xl shadow-xl p-8">
-
-        <?php if (!empty(
-$error ?? null)) : ?>
+        <?php if (!empty($error)) : ?>
         <div class="mb-4 p-3 rounded border border-red-200 bg-red-50 text-red-700">
             <?php echo htmlspecialchars($error); ?>
         </div>
         <?php endif; ?>
 
         <!-- User Type Selection -->
-        <form method="POST" class="space-y-4">
+        <form method="POST" action="login_result.php" class="space-y-4">
         <input type="hidden" name="userType" id="userType" value="<?php echo htmlspecialchars($selectedType); ?>">
         <div class="mb-6">
             <label class="text-gray-700 mb-3 block">I want to log in as</label>
@@ -119,7 +50,8 @@ $error ?? null)) : ?>
                 type="submit"
                 name="userType"
                 value="buyer"
-                formnovalidate
+                    formnovalidate
+                    formaction="login.php"
                 class="flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all <?php echo $selectedType === 'buyer' ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'; ?>"
             >
                 <span>👤</span>
@@ -132,6 +64,7 @@ $error ?? null)) : ?>
                 name="userType"
                 value="seller"
                 formnovalidate
+                formaction="login.php"
                 class="flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all <?php echo $selectedType === 'seller' ? 'border-purple-600 bg-purple-50 text-purple-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'; ?>"
             >
                 <span>🏪</span>
@@ -202,7 +135,7 @@ $error ?? null)) : ?>
         <div class="mt-6 text-center">
             <p class="text-gray-600">
             Don't have an account?
-            <a href="register.php" class="<?php echo $selectedType === 'buyer' ? 'text-blue-600' : 'text-purple-600'; ?>">
+            <a href="register.php?userType=<?php echo urlencode($selectedType); ?>" class="<?php echo $selectedType === 'buyer' ? 'text-blue-600' : 'text-purple-600'; ?>">
                 Sign up
             </a>
             </p>

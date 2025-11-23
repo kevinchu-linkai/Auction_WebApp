@@ -1,79 +1,38 @@
 <?php
-  // Selected user type (buyer/seller)
-  $selectedType = $_POST['userType'] ?? 'buyer';
+  session_start();
 
-  // Form data (not connected to DB)
-  $username = $_POST['username'] ?? '';
-  $email = $_POST['email'] ?? '';
-  $password = $_POST['password'] ?? '';
-  $confirmPassword = $_POST['confirmPassword'] ?? '';
-  $agreeToTerms = isset($_POST['terms']);
+    // Read flash messages and previous inputs from session (set by process_registration.php)
+    $success = $_SESSION['reg_success'] ?? false;
+    $successMessage = $_SESSION['reg_success_msg'] ?? '';
+    $error = $_SESSION['reg_error'] ?? '';
+    $old = $_SESSION['reg_old'] ?? [];
+    $regRedirect = $_SESSION['reg_redirect'] ?? null;
 
-  $success = false;
-  $successMessage = '';
-  $error = '';
-
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-      // If the POST contains userType but NOT the main register button,
-      // it's a tile click (selection change) even if some fields are filled.
-      $isSelectionOnly = isset($_POST['userType']) && !isset($_POST['register']);
-
-      if ($isSelectionOnly) {
-        // Just update selection; $selectedType already taken from POST at the top.
-      } else {
-        if ($password !== $confirmPassword) {
-          echo "<script>alert('Passwords do not match!')</script>";
-        } elseif (!$agreeToTerms) {
-          echo "<script>alert('Please agree to the terms and conditions')</script>";
-        } else {
-          // Registration validation passed. Insert into DB.
-          require_once 'database.php';
-
-          // Determine table names and check SQL
-          if ($selectedType === 'seller') {
-            $checkSql = 'SELECT sellerId FROM Seller WHERE email = ? OR username = ? LIMIT 1';
-            $insertSql = 'INSERT INTO Seller (username, email, password) VALUES (?, ?, ?)';
-          } else {
-            $checkSql = 'SELECT buyerId FROM Buyer WHERE email = ? OR username = ? LIMIT 1';
-            $insertSql = 'INSERT INTO Buyer (username, email, password) VALUES (?, ?, ?)';
-          }
-
-          // Check for duplicate email/username
-          $stmt = mysqli_prepare($connection, $checkSql);
-          if ($stmt) {
-            mysqli_stmt_bind_param($stmt, 'ss', $email, $username);
-            mysqli_stmt_execute($stmt);
-            mysqli_stmt_store_result($stmt);
-            if (mysqli_stmt_num_rows($stmt) > 0) {
-              $error = 'An account with that email or username already exists.';
-              mysqli_stmt_close($stmt);
-            } else {
-              mysqli_stmt_close($stmt);
-
-              // Insert new user with hashed password
-              $hash = password_hash($password, PASSWORD_DEFAULT);
-              $ins = mysqli_prepare($connection, $insertSql);
-              if ($ins) {
-                mysqli_stmt_bind_param($ins, 'sss', $username, $email, $hash);
-                $ok = mysqli_stmt_execute($ins);
-                if ($ok) {
-                  $success = true;
-                  $successMessage = 'Account created successfully. <a href="login.php" class="text-blue-600 underline">Sign in</a>.';
-                  $password = $confirmPassword = '';
-                } else {
-                  $error = 'Failed to create account (database error).';
-                }
-                mysqli_stmt_close($ins);
-              } else {
-                $error = 'Database error (prepare failed).';
-              }
-            }
-          } else {
-            $error = 'Database error (prepare failed).';
-          }
-        }
-      }
+    // Clear flashes. Preserve `reg_old` if registration just succeeded so the
+    // page continues to show the filled fields while the success message is
+    // visible. Clear `reg_old` only when there's no recent success.
+    if ($success) {
+      unset($_SESSION['reg_success'], $_SESSION['reg_success_msg'], $_SESSION['reg_error'], $_SESSION['reg_redirect']);
+    } else {
+      unset($_SESSION['reg_success'], $_SESSION['reg_success_msg'], $_SESSION['reg_error'], $_SESSION['reg_old'], $_SESSION['reg_redirect']);
     }
+
+  // Selected user type (buyer/seller)
+  // Prefer session 'old' inputs, then POST (selection change), then GET (link to specific signup), default to 'buyer'.
+  $selectedType = $old['userType'] ?? ($_POST['userType'] ?? ($_GET['userType'] ?? 'buyer'));
+
+    // If registration succeeded, send a Refresh header to redirect to login after a short delay.
+    if (!empty($success)) {
+      $target = $regRedirect ?? 'login.php';
+      header('Refresh: 3; url=' . $target);
+    }
+
+  // Form data (prefer old inputs from session)
+  $username = $old['username'] ?? ($_POST['username'] ?? '');
+  $email = $old['email'] ?? ($_POST['email'] ?? '');
+  $password = '';
+  $confirmPassword = '';
+  $agreeToTerms = isset($old['terms']) ? (bool)$old['terms'] : (isset($_POST['terms']) ? true : false);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -98,8 +57,9 @@
   <!-- Sign Up Card -->
   <div class="bg-white rounded-2xl shadow-xl p-8">
     <?php if (!empty($success)) : ?>
-      <div class="mb-4 p-3 rounded border border-green-200 bg-green-50 text-green-700">
+      <div class="mb-4 p-3 rounded border border-green-200 bg-green-50 text-green-700" id="reg-success">
         <?php echo $successMessage; ?>
+        <div class="text-sm text-gray-600 mt-2">Redirecting to <a href="login.php" class="text-blue-600 underline">login</a> in 3 seconds...</div>
       </div>
     <?php endif; ?>
     <?php if (!empty($error)) : ?>
@@ -109,7 +69,7 @@
     <?php endif; ?>
 
     <!-- User Type Selection -->
-    <form method="POST" class="space-y-4">
+    <form method="POST" action="process_registration.php" class="space-y-4">
       <input type="hidden" name="userType" id="userType" value="<?php echo htmlspecialchars($selectedType); ?>">
 
       <div class="mb-6">
@@ -122,6 +82,7 @@
             name="userType"
             value="buyer"
             formnovalidate
+            formaction="register.php"
             class="flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all
             <?php echo $selectedType === 'buyer'
               ? 'border-blue-600 bg-blue-50 text-blue-700'
@@ -137,6 +98,7 @@
             name="userType"
             value="seller"
             formnovalidate
+            formaction="register.php"
             class="flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all
             <?php echo $selectedType === 'seller'
               ? 'border-purple-600 bg-purple-50 text-purple-700'
@@ -246,7 +208,7 @@
 
       <div class="mt-6 text-center text-gray-600">
         Already have an account?
-        <a href="login.php" class="text-blue-600 hover:text-blue-700">Sign in</a>
+        <a href="login.php?userType=<?php echo urlencode($selectedType); ?>" class="text-blue-600 hover:text-blue-700">Sign in</a>
       </div>
     </form>
   </div>
