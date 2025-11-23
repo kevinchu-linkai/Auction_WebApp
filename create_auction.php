@@ -22,6 +22,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 }
 
+// Handle remove-photo action (user clicked Remove Photo on step 2)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['removePhoto'])) {
+  $old = $_SESSION[$sessionKey]['temp_photo'] ?? null;
+  if ($old) {
+    $full = __DIR__ . '/' . $old;
+    if (is_file($full)) @unlink($full);
+    unset($_SESSION[$sessionKey]['temp_photo']);
+  }
+  // stay on step 2 after removal
+  $currentStep = 2;
+}
+
 // Handle immediate upload of image to a temporary location so it persists across steps
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['imageInput']) && is_uploaded_file($_FILES['imageInput']['tmp_name'])) {
   $uploadsDir = __DIR__ . '/img/uploads';
@@ -48,6 +60,9 @@ $startingPrice = $_SESSION[$sessionKey]['startingPrice'] ?? '';
 $reservePrice = $_SESSION[$sessionKey]['reservePrice'] ?? '';
 $startDate = $_SESSION[$sessionKey]['startDate'] ?? '';
 $endDate = $_SESSION[$sessionKey]['endDate'] ?? '';
+
+// Existing uploaded temp photo (used to render preview and hide Add area)
+$existingPhoto = $_SESSION[$sessionKey]['temp_photo'] ?? null;
 
 // Image previews handled by JS only
 
@@ -118,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['launch'])) {
                 // Another process likely inserted the same name; select the id.
                 $sel = mysqli_prepare($connection, "SELECT categoryId FROM Category WHERE name = ? LIMIT 1");
                 if ($sel) {
-                  mysqli_stmt_bind_param($sel, 's', $category);
+                  mysqli_stmt_bind_param($sel, 's', $categoryName);
                   if (mysqli_stmt_execute($sel)) {
                     mysqli_stmt_bind_result($sel, $categoryId);
                     mysqli_stmt_fetch($sel);
@@ -404,15 +419,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['launch'])) {
       <div class="bg-white rounded-2xl shadow-lg p-8 border border-gray-100 space-y-6">
 
         <h2 class="text-gray-900 mb-2">Upload Photos</h2>
-        
-        <!-- Image Preview Container -->
-        <div id="imagePreviewContainer" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
 
-        <label class="w-36 h-36 md:w-40 md:h-40 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-purple-400">
-          <span class="text-3xl mb-1">📤</span>
-          <span class="text-sm">Add Photo</span>
-          <input type="file" id="imageInput" name="imageInput" accept="image/*" class="sr-only">
-        </label>
+        <!-- Image Preview Container -->
+        <div id="imagePreviewContainer" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <?php if ($existingPhoto): ?>
+            <div class="relative w-36 h-36 md:w-40 md:h-40">
+              <img src="<?php echo htmlspecialchars($existingPhoto); ?>" class="w-full h-full object-cover rounded-xl border-2 border-gray-200" />
+            </div>
+          <?php endif; ?>
+        </div>
+
+        <!-- Hidden file input (always present so Replace works) -->
+        <input type="file" id="imageInput" name="imageInput" accept="image/*" class="sr-only">
+
+        <?php if (!$existingPhoto): ?>
+          <div id="addPhotoArea" class="w-36 h-36 md:w-40 md:h-40 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-purple-400">
+            <button type="button" id="addPhotoBtn" class="flex flex-col items-center justify-center w-full h-full bg-transparent border-0">
+              <span class="text-3xl mb-1">📤</span>
+              <span class="text-sm">Add Photo</span>
+            </button>
+          </div>
+        <?php else: ?>
+          <div class="flex items-center gap-3">
+            <button type="button" id="replacePhotoBtn" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl" onclick="document.getElementById('imageInput').click()">Replace Photo</button>
+            <button type="submit" name="removePhoto" value="1" class="px-4 py-2 bg-red-50 text-red-700 rounded-xl" onclick="document.getElementById('currentStep').value=2">Remove Photo</button>
+          </div>
+        <?php endif; ?>
 
         <div class="flex justify-between pt-4">
           <button type="submit" onclick="goStep(1)"
@@ -508,8 +540,15 @@ if (input) {
       <img src="${url}" class="w-full h-full object-cover rounded-xl border-2 border-gray-200" />
     `;
     previewContainer.appendChild(div);
+    // hide add area if present
+    const addArea = document.getElementById('addPhotoArea');
+    if (addArea) addArea.style.display = 'none';
   });
 }
+
+// Wire up Add/Replace buttons to trigger file chooser
+const addBtn = document.getElementById('addPhotoBtn');
+if (addBtn && input) addBtn.addEventListener('click', () => input.click());
 </script>
 
 <!-- Category selection visual update (client-side) -->
