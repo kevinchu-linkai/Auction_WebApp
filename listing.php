@@ -1,4 +1,6 @@
 <?php
+date_default_timezone_set('Europe/London');
+
 // Database-backed listing
 if (session_status() === PHP_SESSION_NONE) session_start();
 
@@ -70,12 +72,18 @@ $auctionEndTime = strtotime($row['endDate']);
 
 // derive a display status from timestamps to handle small clock drifts / DB state lag
 $now_ts = time();
-// derive a display status from timestamps to handle small clock drifts / DB state lag
-$displayStatus = $dbState;
-if ($now_ts >= $auctionEndTime) {
-    $displayStatus = 'expired';
-} elseif ($auctionStatus === 'not-started' && $now_ts >= $auctionStartTime && $now_ts < $auctionEndTime) {
+
+// Prefer a timestamp-derived display status so the UI reflects the real-time schedule
+// even if the DB `state` field hasn't been synchronized yet.
+if ($now_ts < $auctionStartTime) {
+    $displayStatus = 'not-started';
+} elseif ($now_ts >= $auctionStartTime && $now_ts < $auctionEndTime) {
     $displayStatus = 'ongoing';
+} elseif ($now_ts >= $auctionEndTime) {
+    $displayStatus = 'expired';
+} else {
+    // fallback to DB state if timestamps are missing/unparseable
+    $displayStatus = $dbState;
 }
 
 // get current highest bid
