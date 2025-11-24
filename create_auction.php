@@ -411,7 +411,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['launch'])) {
             // clear multi-step session data on successful creation
             unset($_SESSION[$sessionKey]);
             $shouldRedirect = true;
-            $redirectUrl = 'browse.php?created=1';
+            $redirectUrl = 'mylistings.php?created=1';
           }
         } else {
           if ($error === '') $error = 'Database error preparing auction insert.';
