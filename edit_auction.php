@@ -149,8 +149,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // handle image upload (optional) and removal
     $photoPath = $item['photo'] ?? null;
     $oldPhoto = $photoPath;
-    $itemUpdated = false;
-    $oldDeleted = null;
 
     // check if the user requested removal
     $removeRequested = (!empty($_POST['removePhoto']) && $_POST['removePhoto'] === '1');
@@ -185,12 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!empty($oldPhoto) && $oldPhoto !== $photoPath && strpos($oldPhoto, 'img/uploads/') === 0) {
                     $oldFull = __DIR__ . '/' . $oldPhoto;
                     if (is_file($oldFull)) {
-                        if (@unlink($oldFull)) {
-                            $oldDeleted = true;
-                        } else {
-                            // couldn't delete old file, but continue
-                            $oldDeleted = false;
-                        }
+                        @unlink($oldFull);
                     }
                 }
             } else {
@@ -223,8 +216,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mysqli_stmt_bind_param($updItem, 'sssii', $posted['auctionName'], $dbCondition, $posted['description'], $categoryId, $item['itemId']);
             if (!mysqli_stmt_execute($updItem)) {
                 $error = 'Database error updating item: ' . mysqli_error($connection) . ' (' . mysqli_stmt_errno($updItem) . ')';
-            } else {
-                $itemUpdated = true;
             }
             mysqli_stmt_close($updItem);
         } else {
@@ -237,8 +228,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mysqli_stmt_bind_param($updItem, 'ssssii', $posted['auctionName'], $dbCondition, $posted['description'], $photoPath, $categoryId, $item['itemId']);
             if (!mysqli_stmt_execute($updItem)) {
                 $error = 'Database error updating item: ' . mysqli_error($connection) . ' (' . mysqli_stmt_errno($updItem) . ')';
-            } else {
-                $itemUpdated = true;
             }
             mysqli_stmt_close($updItem);
         } else {
@@ -247,25 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // If item update ok, update auction
-    // create debug log info for this POST attempt (will be appended)
-    $debugLog = [];
-    $debugLog['time'] = date('c');
-    $debugLog['auctionId'] = $auctionId;
-    $debugLog['itemId'] = $item['itemId'] ?? null;
-    $debugLog['posted'] = $posted;
-    $debugLog['removeRequested'] = $removeRequested;
-    $debugLog['oldPhoto'] = $oldPhoto;
-    $debugLog['photoPath'] = $photoPath;
-    $debugLog['files'] = [];
-    if (!empty($_FILES['image'])) {
-        $debugLog['files'] = [
-            'name' => $_FILES['image']['name'] ?? null,
-            'type' => $_FILES['image']['type'] ?? null,
-            'tmp_name' => $_FILES['image']['tmp_name'] ?? null,
-            'error' => $_FILES['image']['error'] ?? null,
-            'size' => $_FILES['image']['size'] ?? null,
-        ];
-    }
+    
 
     if (empty($error)) {
         $sd = date('Y-m-d H:i:s', strtotime($posted['startDate']));
@@ -284,16 +255,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 // Successful update: redirect back to My Listings
                 mysqli_stmt_close($updAuction);
-                header('Location: mylistings.php');
-                exit;
-                mysqli_stmt_close($updAuction);
-                // append debug info to file before redirect
-                $tmpDir = __DIR__ . '/tmp';
-                if (!is_dir($tmpDir)) @mkdir($tmpDir, 0755, true);
-                $logFile = $tmpDir . '/upload_debug.log';
-                $debugLog['itemUpdated'] = !empty($itemUpdated);
-                $debugLog['oldDeleted'] = $oldDeleted;
-                @file_put_contents($logFile, print_r($debugLog, true) . "\n---\n", FILE_APPEND);
                 header('Location: mylistings.php');
                 exit;
             }
@@ -330,15 +291,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?= htmlspecialchars($error) ?>
         </div>
     <?php endif; ?>
-    <?php if (!empty($debugOutput)): ?>
-        <div class="mb-4">
-            <strong class="block text-gray-700 mb-1">Debug info (POST):</strong>
-            <?= $debugOutput ?>
-        </div>
-    <?php endif; ?>
 
     <form method="POST" enctype="multipart/form-data" class="space-y-5">
         <input type="hidden" name="removePhoto" id="removePhoto" value="0">
+        <!-- single shared file input (kept outside labels to avoid double-trigger) -->
+        <input
+            type="file"
+            name="image"
+            id="imageInput"
+            accept="image/*"
+            class="hidden"
+        />
         <!-- Image Upload Card -->
         <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
             <div class="flex items-center gap-2 mb-4">
@@ -360,13 +323,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="flex gap-2">
                         <label id="changeImageBtn" class="flex-1 py-2 text-center bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition-colors">
                             Change
-                            <input
-                                type="file"
-                                name="image"
-                                id="imageInput"
-                                accept="image/*"
-                                class="hidden"
-                            />
                         </label>
                         <button
                             type="button"
@@ -384,13 +340,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <p class="text-gray-600">Click to upload</p>
                         <p class="text-gray-400 mt-1">JPG, PNG or WEBP</p>
                     </div>
-                    <input
-                        type="file"
-                        name="image"
-                        id="imageInput2"
-                        accept="image/*"
-                        class="hidden"
-                    />
                 </label>
             </div>
         </div>
@@ -600,7 +549,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <script>
 // Simple image preview + remove logic (UI-only)
 const imageInput = document.getElementById('imageInput');
-const imageInput2 = document.getElementById('imageInput2');
 const previewImage = document.getElementById('previewImage');
 const imagePreviewWrapper = document.getElementById('imagePreviewWrapper');
 const imagePlaceholder = document.getElementById('imagePlaceholder');
@@ -626,8 +574,13 @@ function handleFileInput(e) {
 if (imageInput) {
     imageInput.addEventListener('change', handleFileInput);
 }
-if (imageInput2) {
-    imageInput2.addEventListener('change', handleFileInput);
+// make clicking the placeholder open the main file input as well
+const placeholder = document.getElementById('imagePlaceholder');
+if (placeholder && imageInput) {
+    placeholder.addEventListener('click', (e) => {
+        e.preventDefault();
+        imageInput.click();
+    });
 }
 // make Change button explicitly open the hidden file input (works even if label behavior is inconsistent)
 const changeImageBtn = document.getElementById('changeImageBtn');
@@ -635,6 +588,9 @@ if (changeImageBtn && imageInput) {
     changeImageBtn.addEventListener('click', (e) => {
         // if click originated on the inner input, let it proceed
         if (e.target && e.target.tagName === 'INPUT') return;
+        // ensure remove flag cleared before choosing new file
+        const remFld = document.getElementById('removePhoto');
+        if (remFld) remFld.value = '0';
         imageInput.click();
     });
 }
@@ -644,7 +600,6 @@ if (removeImageBtn) {
         imagePreviewWrapper.classList.add('hidden');
         imagePlaceholder.classList.remove('hidden');
         if (imageInput) imageInput.value = '';
-        if (imageInput2) imageInput2.value = '';
         // mark removal so server sets photo = NULL
         const rem = document.getElementById('removePhoto');
         if (rem) rem.value = '1';
