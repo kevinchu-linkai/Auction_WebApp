@@ -46,7 +46,7 @@ if (!($connection instanceof mysqli)) {
 
 // Load auction + item + category
 $stmt = $connection->prepare(
-    'SELECT a.auctionId,a.startingPrice,a.reservePrice,a.startDate,a.endDate,a.state,a.finalPrice, '
+    'SELECT a.auctionId,a.sellerId,a.startingPrice,a.reservePrice,a.startDate,a.endDate,a.state,a.finalPrice, '
     . 'i.itemId,i.name AS item_name,i.description,i.photo, i.`condition` AS item_condition, c.name AS category_name '
     . 'FROM Auction a '
     . 'JOIN Item i ON a.itemId = i.itemId '
@@ -67,6 +67,7 @@ $stmt->close();
 // parse times and state
 // `dbState` is the authoritative state stored in the Auction table.
 $dbState = $row['state'];
+$sellerId = isset($row['sellerId']) ? (int)$row['sellerId'] : 0;
 $auctionStartTime = strtotime($row['startDate']);
 $auctionEndTime = strtotime($row['endDate']);
 
@@ -75,15 +76,20 @@ $now_ts = time();
 
 // Prefer a timestamp-derived display status so the UI reflects the real-time schedule
 // even if the DB `state` field hasn't been synchronized yet.
-if ($now_ts < $auctionStartTime) {
-    $displayStatus = 'not-started';
-} elseif ($now_ts >= $auctionStartTime && $now_ts < $auctionEndTime) {
-    $displayStatus = 'ongoing';
-} elseif ($now_ts >= $auctionEndTime) {
-    $displayStatus = 'expired';
+if ($dbState === 'cancelled') {
+    // Always surface cancellation explicitly
+    $displayStatus = 'cancelled';
 } else {
-    // fallback to DB state if timestamps are missing/unparseable
-    $displayStatus = $dbState;
+    if ($now_ts < $auctionStartTime) {
+        $displayStatus = 'not-started';
+    } elseif ($now_ts >= $auctionStartTime && $now_ts < $auctionEndTime) {
+        $displayStatus = 'ongoing';
+    } elseif ($now_ts >= $auctionEndTime) {
+        $displayStatus = 'expired';
+    } else {
+        // fallback to DB state if timestamps are missing/unparseable
+        $displayStatus = $dbState;
+    }
 }
 
 // get current highest bid
@@ -95,34 +101,55 @@ $stmt->close();
 $maxBid = $r['maxBid'] !== null ? (float)$r['maxBid'] : null;
 $currentBid = $maxBid !== null ? $maxBid : (float)$row['startingPrice'];
 
-// handle POST (placing a bid)
+// handle POST actions (relist or place bid)
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $amountRaw = $_POST['bid_amount'] ?? '';
-    $amount = floatval($amountRaw);
-    $minBid = $currentBid + 50;
-
-    // use the displayStatus (computed from times) to decide if bidding is open
-    if ($displayStatus !== 'ongoing') {
-        $error = 'Bidding is not open for this auction';
-    } elseif (empty($_SESSION['user_id'])) {
-        $error = 'Please log in to place a bid';
-    } elseif ($amount <= $currentBid) {
-        $error = "Bid must be higher than current bid of $$currentBid";
-    } elseif ($amount < $minBid) {
-        $error = 'Minimum bid increment is $50';
-    } else {
-        // insert bid
-        $buyerId = (int)$_SESSION['user_id'];
-        $ins = $connection->prepare('INSERT INTO Bid (auctionId,buyerId,bidAmount) VALUES (?,?,?)');
-        $ins->bind_param('iid', $auctionId, $buyerId, $amount);
-        if ($ins->execute()) {
-            // success — redirect to avoid resubmission (preserve auctionId param)
-            $base = strtok($_SERVER['REQUEST_URI'], '?');
-            header('Location: ' . $base . '?auctionId=' . $auctionId);
-            exit;
+    // Relist action
+    if (isset($_POST['relist'])) {
+        // Basic authorization: must be logged in as seller and auction currently cancelled
+        $isSeller = isset($_SESSION['account_type']) && $_SESSION['account_type'] === 'seller';
+        // If your session stores seller id separately, adjust mapping here
+        if ($dbState === 'cancelled' && $isSeller) {
+            $up = $connection->prepare('UPDATE Auction SET state = ? WHERE auctionId = ? AND state = ?');
+            $newState = 'ongoing';
+            $oldState = 'cancelled';
+            $up->bind_param('sis', $newState, $auctionId, $oldState);
+            if ($up->execute()) {
+                $up->close();
+                $base = strtok($_SERVER['REQUEST_URI'], '?');
+                header('Location: ' . $base . '?auctionId=' . $auctionId);
+                exit;
+            }
+            $error = 'Failed to relist auction';
+            $up->close();
         } else {
-            $error = 'Failed to record bid';
+            $error = 'Unauthorized relist attempt';
+        }
+    } elseif (isset($_POST['bid_amount'])) {
+        // (Bid logic retained but deactivated in UI; kept for completeness)
+        $amountRaw = $_POST['bid_amount'] ?? '';
+        $amount = floatval($amountRaw);
+        $minBid = $currentBid + 50;
+        if ($displayStatus !== 'ongoing') {
+            $error = 'Bidding is not open for this auction';
+        } elseif (empty($_SESSION['user_id'])) {
+            $error = 'Please log in to place a bid';
+        } elseif ($amount <= $currentBid) {
+            $error = "Bid must be higher than current bid of $$currentBid";
+        } elseif ($amount < $minBid) {
+            $error = 'Minimum bid increment is $50';
+        } else {
+            $buyerId = (int)$_SESSION['user_id'];
+            $ins = $connection->prepare('INSERT INTO Bid (auctionId,buyerId,bidAmount) VALUES (?,?,?)');
+            $ins->bind_param('iid', $auctionId, $buyerId, $amount);
+            if ($ins->execute()) {
+                $base = strtok($_SERVER['REQUEST_URI'], '?');
+                header('Location: ' . $base . '?auctionId=' . $auctionId);
+                exit;
+            } else {
+                $error = 'Failed to record bid';
+            }
+            $ins->close();
         }
     }
 }
@@ -231,6 +258,17 @@ function timeAgoSimple($ts) {
                         <span class="text-red-900 font-semibold">Auction Cancelled</span>
                     </div>
                     <p class="text-red-700 mt-2">This auction has been cancelled by the seller.</p>
+                    <?php if (isset($_SESSION['account_type']) && $_SESSION['account_type'] === 'seller'): ?>
+                        <form method="post" class="mt-4 inline-block">
+                            <input type="hidden" name="relist" value="1">
+                            <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded shadow">
+                                Relist Auction
+                            </button>
+                        </form>
+                    <?php endif; ?>
+                    <?php if (!empty($error)): ?>
+                        <p class="text-sm text-red-600 mt-3"><?= htmlspecialchars($error) ?></p>
+                    <?php endif; ?>
                 </div>
             <?php elseif ($displayStatus === 'expired'): ?>
                 <div class="bg-gray-100 border border-gray-300 rounded-lg p-4">
