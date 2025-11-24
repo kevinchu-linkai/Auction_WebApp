@@ -1,169 +1,474 @@
-<?php include_once("header.php")?>
-<?php require("utilities.php")?>
-
 <?php
-  // Get info from the URL:
-  $item_id = $_GET['item_id'];
+// Database-backed listing
+if (session_status() === PHP_SESSION_NONE) session_start();
 
-  // TODO: Use item_id to make a query to the database.
+// include DB connection (expects $connection = mysqli_connect(...))
+require_once __DIR__ . '/database.php';
 
-  // DELETEME: For now, using placeholder data.
-  $title = "Placeholder title";
-  $description = "Description blah blah blah";
-  $current_price = 30.50;
-  $num_bids = 1;
-  $end_time = new DateTime('2020-11-02T00:00:00');
+// read auction id (accept camelCase `auctionId`, snake_case `auction_id`, or `id`)
+$auctionId = 0;
+if (isset($_GET['auctionId'])) {
+    $auctionId = (int) $_GET['auctionId'];
+} elseif (isset($_GET['auction_id'])) {
+    $auctionId = (int) $_GET['auction_id'];
+} elseif (isset($_GET['id'])) {
+    $auctionId = (int) $_GET['id'];
+}
+if ($auctionId <= 0) {
+    http_response_code(400);
+    ?>
+    <!doctype html>
+    <html><head><meta charset="utf-8"><title>Missing auction id</title></head><body>
+    <div style="max-width:600px;margin:48px auto;font-family:system-ui,Segoe UI,Roboto,Arial;background:#fff;padding:20px;border-radius:8px;border:1px solid #eee;">
+      <h2 style="margin:0 0 12px">Missing auction id</h2>
+      <p>Please open this page with an auction id, for example:</p>
+      <pre style="background:#f7f7f7;padding:8px;border-radius:4px">/Auction_WebApp/listing.php?auctionId=1</pre>
+      <p><a href="/Auction_WebApp/" style="color:#0366d6">Return to listings</a></p>
+    </div>
+    </body></html>
+    <?php
+    exit;
+}
 
-  // TODO: Note: Auctions that have ended may pull a different set of data,
-  //       like whether the auction ended in a sale or was cancelled due
-  //       to lack of high-enough bids. Or maybe not.
-  
-  // Calculate time to auction end:
-  $now = new DateTime();
-  
-  if ($now < $end_time) {
-    $time_to_end = date_diff($now, $end_time);
-    $time_remaining = ' (in ' . display_time_remaining($time_to_end) . ')';
-  }
-  
-  // TODO: If the user has a session, use it to make a query to the database
-  //       to determine if the user is already watching this item.
-  //       For now, this is hardcoded.
-  $has_session = true;
-  $watching = false;
+// convenience
+$connection = $GLOBALS['connection'] ?? ($connection ?? null);
+if (!($connection instanceof mysqli)) {
+    // try variable name 'conn' fallback
+    if (isset($conn) && $conn instanceof mysqli) $connection = $conn;
+}
+if (!($connection instanceof mysqli)) {
+    http_response_code(500);
+    echo 'Database connection not available. Check database.php';
+    exit;
+}
+
+// Load auction + item + category
+$stmt = $connection->prepare(
+    'SELECT a.auctionId,a.startingPrice,a.reservePrice,a.startDate,a.endDate,a.state,a.finalPrice, '
+    . 'i.itemId,i.name AS item_name,i.description,i.photo, i.`condition` AS item_condition, c.name AS category_name '
+    . 'FROM Auction a '
+    . 'JOIN Item i ON a.itemId = i.itemId '
+    . 'JOIN Category c ON i.categoryId = c.categoryId '
+    . 'WHERE a.auctionId = ? LIMIT 1'
+);
+$stmt->bind_param('i', $auctionId);
+$stmt->execute();
+$res = $stmt->get_result();
+if ($res->num_rows === 0) {
+    http_response_code(404);
+    echo 'Auction not found';
+    exit;
+}
+$row = $res->fetch_assoc();
+$stmt->close();
+
+// parse times and state
+// `dbState` is the authoritative state stored in the Auction table.
+$dbState = $row['state'];
+$auctionStartTime = strtotime($row['startDate']);
+$auctionEndTime = strtotime($row['endDate']);
+
+// derive a display status from timestamps to handle small clock drifts / DB state lag
+$now_ts = time();
+// derive a display status from timestamps to handle small clock drifts / DB state lag
+$displayStatus = $dbState;
+if ($now_ts >= $auctionEndTime) {
+    $displayStatus = 'expired';
+} elseif ($auctionStatus === 'not-started' && $now_ts >= $auctionStartTime && $now_ts < $auctionEndTime) {
+    $displayStatus = 'ongoing';
+}
+
+// get current highest bid
+$stmt = $connection->prepare('SELECT MAX(bidAmount) AS maxBid FROM Bid WHERE auctionId = ?');
+$stmt->bind_param('i', $auctionId);
+$stmt->execute();
+$r = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+$maxBid = $r['maxBid'] !== null ? (float)$r['maxBid'] : null;
+$currentBid = $maxBid !== null ? $maxBid : (float)$row['startingPrice'];
+
+// handle POST (placing a bid)
+$error = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $amountRaw = $_POST['bid_amount'] ?? '';
+    $amount = floatval($amountRaw);
+    $minBid = $currentBid + 50;
+
+    // use the displayStatus (computed from times) to decide if bidding is open
+    if ($displayStatus !== 'ongoing') {
+        $error = 'Bidding is not open for this auction';
+    } elseif (empty($_SESSION['user_id'])) {
+        $error = 'Please log in to place a bid';
+    } elseif ($amount <= $currentBid) {
+        $error = "Bid must be higher than current bid of $$currentBid";
+    } elseif ($amount < $minBid) {
+        $error = 'Minimum bid increment is $50';
+    } else {
+        // insert bid
+        $buyerId = (int)$_SESSION['user_id'];
+        $ins = $connection->prepare('INSERT INTO Bid (auctionId,buyerId,bidAmount) VALUES (?,?,?)');
+        $ins->bind_param('iid', $auctionId, $buyerId, $amount);
+        if ($ins->execute()) {
+            // success — redirect to avoid resubmission (preserve auctionId param)
+            $base = strtok($_SERVER['REQUEST_URI'], '?');
+            header('Location: ' . $base . '?auctionId=' . $auctionId);
+            exit;
+        } else {
+            $error = 'Failed to record bid';
+        }
+    }
+}
+
+// Keep the official auction status from the database for display/records,
+// but use `$displayStatus` (derived from timestamps) for countdowns and bidding availability.
+$auctionStatus = $dbState;
+
+// Load bid history (most recent first)
+$bids = [];
+$stmt = $connection->prepare(
+    'SELECT b.bidAmount, b.bidTime, COALESCE(u.username, "Bidder") AS bidder '
+    . 'FROM Bid b LEFT JOIN Buyer u ON b.buyerId = u.buyerId '
+    . 'WHERE b.auctionId = ? ORDER BY b.bidTime DESC'
+);
+$stmt->bind_param('i', $auctionId);
+$stmt->execute();
+$res = $stmt->get_result();
+while ($br = $res->fetch_assoc()) {
+    $bids[] = [
+        'bidder' => $br['bidder'],
+        'amount' => (float)$br['bidAmount'],
+        'timestamp' => strtotime($br['bidTime']),
+    ];
+}
+$stmt->close();
+
+// template variables
+$title = $row['item_name'];
+$description = $row['description'];
+$item_condition = $row['item_condition'] ?? '';
+$current_price = $currentBid;
+$num_bids = count($bids);
+$bidHistory = $bids;
+$minBid = $currentBid + 50;
+$startingPrice = (float)($row['startingPrice'] ?? 0);
+$reservePrice = array_key_exists('reservePrice', $row) ? (float)$row['reservePrice'] : null;
+
+// Helper: human-readable time ago
+function timeAgoSimple($ts) {
+    $now = time(); $diff = $now - $ts;
+    if ($diff < 60) return 'Just now';
+    $m = floor($diff/60); if ($m<60) return $m.'m ago';
+    $h = floor($diff/3600); if ($h<24) return $h.'h ago';
+    return floor($diff/86400).'d ago';
+}
 ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Premium Auctions</title>
+    <!-- Tailwind via prebuilt CSS (no <script>) -->
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
+    >
+</head>
+<body class="bg-gray-50">
 
-
-<div class="container">
-
-<div class="row"> <!-- Row #1 with auction title + watch button -->
-  <div class="col-sm-8"> <!-- Left col -->
-    <h2 class="my-3"><?php echo($title); ?></h2>
-  </div>
-  <div class="col-sm-4 align-self-center"> <!-- Right col -->
-<?php
-  /* The following watchlist functionality uses JavaScript, but could
-     just as easily use PHP as in other places in the code */
-  if ($now < $end_time):
-?>
-    <div id="watch_nowatch" <?php if ($has_session && $watching) echo('style="display: none"');?> >
-      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addToWatchlist()">+ Add to watchlist</button>
+<header class="bg-white border-b border-gray-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <h1 class="text-xl font-semibold">Premium Auctions</h1>
     </div>
-    <div id="watch_watching" <?php if (!$has_session || !$watching) echo('style="display: none"');?> >
-      <button type="button" class="btn btn-success btn-sm" disabled>Watching</button>
-      <button type="button" class="btn btn-danger btn-sm" onclick="removeFromWatchlist()">Remove watch</button>
+    </header>
+
+<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-6">
+        <a href="mylistings.php" class="inline-flex items-center text-sm text-gray-600 hover:text-gray-800">
+            &larr;&nbsp;Back to My listings
+        </a>
     </div>
-<?php endif /* Print nothing otherwise */ ?>
-  </div>
-</div>
-
-<div class="row"> <!-- Row #2 with auction description + bidding info -->
-  <div class="col-sm-8"> <!-- Left col with item info -->
-
-    <div class="itemDescription">
-    <?php echo($description); ?>
-    </div>
-
-  </div>
-
-  <div class="col-sm-4"> <!-- Right col with bidding info -->
-
-    <p>
-<?php if ($now > $end_time): ?>
-     This auction ended <?php echo(date_format($end_time, 'j M H:i')) ?>
-     <!-- TODO: Print the result of the auction here? -->
-<?php else: ?>
-     Auction ends <?php echo(date_format($end_time, 'j M H:i') . $time_remaining) ?></p>  
-    <p class="lead">Current bid: £<?php echo(number_format($current_price, 2)) ?></p>
-
-    <!-- Bidding form -->
-    <form method="POST" action="place_bid.php">
-      <div class="input-group">
-        <div class="input-group-prepend">
-          <span class="input-group-text">£</span>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Left Column - Image Gallery -->
+        <div>
+            <div class="bg-white rounded-lg overflow-hidden aspect-square border border-gray-200">
+                <?php
+                $photo = $row['photo'] ?? '';
+                $photoUrl = $photo ? $photo : 'https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?w=800&q=80';
+                ?>
+                <img
+                    src="<?= htmlspecialchars($photoUrl) ?>"
+                    alt="<?= htmlspecialchars($title) ?>"
+                    class="w-full h-full object-cover"
+                >
+            </div>
         </div>
-	    <input type="number" class="form-control" id="bid">
-      </div>
-      <button type="submit" class="btn btn-primary form-control">Place bid</button>
-    </form>
-<?php endif ?>
 
-  
-  </div> <!-- End of right col with bidding info -->
+        <!-- Right Column - Auction Details -->
+        <div class="space-y-6">
+            <div>
+                <h1 class="text-2xl font-semibold"><?= htmlspecialchars($title) ?></h1>
+            </div>
 
-</div> <!-- End of row #2 -->
+            <!-- AuctionTimer (PHP-only countdown) -->
+            <?php if ($displayStatus === 'finished'): ?>
+                <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div class="flex items-center gap-2">
+                        <span class="text-green-900 font-semibold">Auction Ended</span>
+                    </div>
+                    <p class="text-green-700 mt-2">This auction has successfully concluded.</p>
+                </div>
+            <?php elseif ($displayStatus === 'cancelled'): ?>
+                <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div class="flex items-center gap-2">
+                        <span class="text-red-900 font-semibold">Auction Cancelled</span>
+                    </div>
+                    <p class="text-red-700 mt-2">This auction has been cancelled by the seller.</p>
+                </div>
+            <?php elseif ($displayStatus === 'expired'): ?>
+                <div class="bg-gray-100 border border-gray-300 rounded-lg p-4">
+                    <div class="flex items-center gap-2">
+                        <span class="text-gray-900 font-semibold">Auction Expired</span>
+                    </div>
+                    <p class="text-gray-700 mt-2">This auction has expired without meeting the reserve price.</p>
+                </div>
+            <?php elseif ($displayStatus === 'not-started'): ?>
+                <div id="auction-countdown" data-ts="<?= $auctionStartTime ?>" data-end="<?= $auctionEndTime ?>" data-phase="start" class="bg-blue-50 border rounded-lg p-4">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="cd-label text-blue-900 font-semibold">Auction Starting In</span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2">
+                        <div class="bg-white rounded-lg p-3 text-center border border-blue-200">
+                            <div class="text-2xl text-blue-900 cd-days"><?= (int) floor(max(0, ($auctionStartTime - time()))/86400) ?></div>
+                            <div class="text-blue-700">Days</div>
+                        </div>
+                        <div class="bg-white rounded-lg p-3 text-center border border-blue-200">
+                            <div class="text-2xl text-blue-900 cd-hours"><?= (int) floor((max(0, ($auctionStartTime - time()))%86400)/3600) ?></div>
+                            <div class="text-blue-700">Hours</div>
+                        </div>
+                        <div class="bg-white rounded-lg p-3 text-center border border-blue-200">
+                            <div class="text-2xl text-blue-900 cd-mins"><?= (int) floor((max(0, ($auctionStartTime - time()))%3600)/60) ?></div>
+                            <div class="text-blue-700">Mins</div>
+                        </div>
+                        <div class="bg-white rounded-lg p-3 text-center border border-blue-200">
+                            <div class="text-2xl text-blue-900 cd-secs"><?= (int) (max(0, ($auctionStartTime - time()))%60) ?></div>
+                            <div class="text-blue-700">Secs</div>
+                        </div>
+                    </div>
+                </div>
+            <?php elseif ($displayStatus === 'ongoing'): ?>
+                <div id="auction-countdown" data-ts="<?= $auctionEndTime ?>" data-end="<?= $auctionEndTime ?>" data-phase="end" class="bg-amber-50 border rounded-lg p-4">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-amber-900 font-semibold">Auction Ending In</span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2">
+                        <div class="bg-white rounded-lg p-3 text-center border border-amber-200">
+                            <div class="text-2xl text-amber-900 cd-days"><?= (int) floor(max(0, ($auctionEndTime - time()))/86400) ?></div>
+                            <div class="text-amber-700">Days</div>
+                        </div>
+                        <div class="bg-white rounded-lg p-3 text-center border border-amber-200">
+                            <div class="text-2xl text-amber-900 cd-hours"><?= (int) floor((max(0, ($auctionEndTime - time()))%86400)/3600) ?></div>
+                            <div class="text-amber-700">Hours</div>
+                        </div>
+                        <div class="bg-white rounded-lg p-3 text-center border border-amber-200">
+                            <div class="text-2xl text-amber-900 cd-mins"><?= (int) floor((max(0, ($auctionEndTime - time()))%3600)/60) ?></div>
+                            <div class="text-amber-700">Mins</div>
+                        </div>
+                        <div class="bg-white rounded-lg p-3 text-center border border-amber-200">
+                            <div class="text-2xl text-amber-900 cd-secs"><?= (int) (max(0, ($auctionEndTime - time()))%60) ?></div>
+                            <div class="text-amber-700">Secs</div>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
 
+            <!-- Current Bid summary (all states) -->
+            <div class="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
 
+                <div class="flex items-baseline justify-between">
+                    <span class="text-gray-600">Starting Price</span>
 
-<?php include_once("footer.php")?>
+                    <div class="flex items-baseline gap-2">
+                        <span class="text-2xl text-gray-900">
+                            $<?= number_format($startingPrice) ?>
+                        </span>
+                        <span class="text-gray-500">USD</span>
+                    </div>
+                </div>
 
+                <?php if (count($bidHistory) > 0): ?>
+                    <div class="flex items-baseline justify-between pt-4 border-t border-gray-200">
+                        <span class="text-gray-600">Current Bid</span>
 
-<script> 
-// JavaScript functions: addToWatchlist and removeFromWatchlist.
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-3xl">
+                                $<?= number_format($currentBid) ?>
+                            </span>
+                            <span class="text-gray-500">USD</span>
+                        </div>
+                    </div>
+                <?php endif; ?>
 
-function addToWatchlist(button) {
-  console.log("These print statements are helpful for debugging btw");
+                <?php if (!empty($reservePrice) && $reservePrice > 0): ?>
+                    <div class="flex items-baseline justify-between">
+                        <span class="text-gray-600">Reserve Price</span>
 
-  // This performs an asynchronous call to a PHP function using POST method.
-  // Sends item ID as an argument to that function.
-  $.ajax('watchlist_funcs.php', {
-    type: "POST",
-    data: {functionname: 'add_to_watchlist', arguments: [<?php echo($item_id);?>]},
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-2xl text-gray-900">$<?= number_format($reservePrice) ?></span>
+                            <span class="text-gray-500">USD</span>
+                        </div>
+                    </div>
+                <?php endif; ?>
 
-    success: 
-      function (obj, textstatus) {
-        // Callback function for when call is successful and returns obj
-        console.log("Success");
-        var objT = obj.trim();
- 
-        if (objT == "success") {
-          $("#watch_nowatch").hide();
-          $("#watch_watching").show();
+                <p class="text-gray-500">
+                    <?php if (count($bidHistory) === 0): ?>
+                        No bids yet
+                    <?php else: ?>
+                        <?= count($bidHistory) ?> bids
+                    <?php endif; ?>
+                </p>
+
+            </div>
+
+            <!-- ItemDetails -->
+            <div class="bg-white rounded-lg border border-gray-200 p-6">
+                <div class="flex items-center gap-2 mb-6">
+                    <h3 class="text-lg font-semibold text-gray-800">Item Details</h3>
+                </div>
+                <div class="space-y-6">
+                    <div>
+                        <h4 class="text-gray-700 mb-2">Condition</h4>
+                        <div class="inline-block bg-green-50 text-green-700 px-4 py-2 rounded-lg border border-green-200">
+                            <?= htmlspecialchars($item_condition ?: 'Unknown') ?>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-gray-700 mb-3">Description</h4>
+                        <p class="text-gray-600 leading-relaxed">
+                            <?= nl2br(htmlspecialchars($description)) ?>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bid History -->
+    <?php if (in_array($displayStatus, ['ongoing', 'finished', 'expired'], true)): ?>
+        <div class="mt-12">
+            <div class="bg-white rounded-lg border border-gray-200">
+                <div class="p-6 border-b border-gray-200">
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-lg font-semibold">Bid History</h2>
+                    </div>
+                </div>
+                <div class="divide-y divide-gray-200">
+                    <?php foreach ($bidHistory as $index => $bid): ?>
+                        <div class="p-4 flex items-center justify-between <?= $index === 0 ? 'bg-blue-50' : '' ?>">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-full flex items-center justify-center
+                                    <?= $index === 0 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700' ?>">
+                                    <?= strtoupper(substr($bid['bidder'], 0, 1)) ?>
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="<?= $index === 0 ? 'text-blue-900 font-semibold' : 'text-gray-900' ?>">
+                                            <?= htmlspecialchars($bid['bidder']) ?>
+                                        </span>
+                                        <?php if ($index === 0): ?>
+                                            <span class="bg-blue-600 text-white px-2 py-0.5 rounded text-xs">
+                                                Leading
+                                            </span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <p class="text-gray-500 text-sm"><?= timeAgoSimple($bid['timestamp']) ?></p>
+                                </div>
+                            </div>
+                            <div class="<?= $index === 0 ? 'text-blue-900 font-semibold' : 'text-gray-900' ?>">
+                                $<?= number_format($bid['amount']) ?>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
+</main>
+
+</body>
+</html>
+<script>
+// Live countdown updater — run after DOM ready and allow client-side switch from start -> end
+document.addEventListener('DOMContentLoaded', function(){
+    var el = document.getElementById('auction-countdown');
+    if (!el) return;
+
+    var phase = el.getAttribute('data-phase') || 'start';
+
+    var startTs = parseInt(el.getAttribute('data-ts') || el.getAttribute('data-start') || '', 10);
+    var endTs   = parseInt(el.getAttribute('data-end') || '', 10);
+    if (isNaN(startTs)) startTs = 0; else startTs *= 1000;
+    if (isNaN(endTs)) endTs = startTs; else endTs *= 1000;
+
+    var targetTs = (phase === 'start') ? startTs : endTs;
+
+    // Initialize label and classes according to the current phase so text is correct on load
+    var label = el.querySelector('.cd-label') || el.querySelector('span.font-semibold');
+    if (label) {
+        if (phase === 'start') {
+            label.textContent = 'Auction Starting In';
+            el.classList.add('bg-blue-50');
+            el.classList.remove('bg-amber-50');
+        } else {
+            label.textContent = 'Auction Ending In';
+            el.classList.add('bg-amber-50');
+            el.classList.remove('bg-blue-50');
         }
-        else {
-          var mydiv = document.getElementById("watch_nowatch");
-          mydiv.appendChild(document.createElement("br"));
-          mydiv.appendChild(document.createTextNode("Add to watch failed. Try again later."));
+    }
+
+    function switchToEnd() {
+        phase = 'end';
+        targetTs = endTs;
+        el.setAttribute('data-phase', 'end');
+
+        var label = el.querySelector('.cd-label') || el.querySelector('span.font-semibold');
+        if (label) label.textContent = 'Auction Ending In';
+
+        el.classList.remove('bg-blue-50');
+        el.classList.add('bg-amber-50');
+    }
+
+    function zeroOut() {
+        var nodes = ['.cd-days','.cd-hours','.cd-mins','.cd-secs'];
+        nodes.forEach(function(sel){ var n = el.querySelector(sel); if (n) n.textContent = 0; });
+    }
+
+    function update(){
+        var now = Date.now();
+
+        // If we're counting down to start and start time passed, switch to end countdown
+        if (phase === 'start' && startTs > 0 && now >= startTs) {
+            if (endTs > now) {
+                switchToEnd();
+            } else {
+                // auction already ended
+                zeroOut();
+                return;
+            }
         }
-      },
 
-    error:
-      function (obj, textstatus) {
-        console.log("Error");
-      }
-  }); // End of AJAX call
+        var diff = Math.max(0, Math.floor((targetTs - now)/1000));
+        var days = Math.floor(diff/86400); diff %= 86400;
+        var hours = Math.floor(diff/3600); diff %= 3600;
+        var mins = Math.floor(diff/60); var secs = diff % 60;
 
-} // End of addToWatchlist func
+        var d = el.querySelector('.cd-days'); if (d) d.textContent = days;
+        var h = el.querySelector('.cd-hours'); if (h) h.textContent = hours;
+        var m = el.querySelector('.cd-mins'); if (m) m.textContent = mins;
+        var s = el.querySelector('.cd-secs'); if (s) s.textContent = secs;
+    }
 
-function removeFromWatchlist(button) {
-  // This performs an asynchronous call to a PHP function using POST method.
-  // Sends item ID as an argument to that function.
-  $.ajax('watchlist_funcs.php', {
-    type: "POST",
-    data: {functionname: 'remove_from_watchlist', arguments: [<?php echo($item_id);?>]},
+    update();
+    setInterval(update, 1000);
+});
 
-    success: 
-      function (obj, textstatus) {
-        // Callback function for when call is successful and returns obj
-        console.log("Success");
-        var objT = obj.trim();
- 
-        if (objT == "success") {
-          $("#watch_watching").hide();
-          $("#watch_nowatch").show();
-        }
-        else {
-          var mydiv = document.getElementById("watch_watching");
-          mydiv.appendChild(document.createElement("br"));
-          mydiv.appendChild(document.createTextNode("Watch removal failed. Try again later."));
-        }
-      },
-
-    error:
-      function (obj, textstatus) {
-        console.log("Error");
-      }
-  }); // End of AJAX call
-
-} // End of addToWatchlist func
 </script>

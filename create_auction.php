@@ -12,9 +12,119 @@ $sessionKey = 'create_auction_form';
 // Initialize session bucket if missing
 if (!isset($_SESSION[$sessionKey]) || !is_array($_SESSION[$sessionKey])) $_SESSION[$sessionKey] = [];
 
+// Edit mode: if ?edit=<auctionId> provided, load auction+item data
+$isEdit = false;
+$editAuctionId = null;
+if (isset($_GET['edit'])) {
+  $maybe = intval($_GET['edit']);
+  if ($maybe > 0) {
+    require_once 'database.php';
+    $sql = 'SELECT auctionId, sellerId, itemId, startingPrice, reservePrice, startDate, endDate, state FROM Auction WHERE auctionId = ? LIMIT 1';
+    $stmt = mysqli_prepare($connection, $sql);
+    if ($stmt) {
+      mysqli_stmt_bind_param($stmt, 'i', $maybe);
+      mysqli_stmt_execute($stmt);
+      mysqli_stmt_store_result($stmt);
+      if (mysqli_stmt_num_rows($stmt) === 1) {
+        mysqli_stmt_bind_result($stmt, $aId, $aSellerId, $aItemId, $aStarting, $aReserve, $aStartDate, $aEndDate, $aState);
+        mysqli_stmt_fetch($stmt);
+        mysqli_stmt_close($stmt);
+
+        // Only allow the seller who owns it to edit
+        $currentSeller = $_SESSION['user_id'] ?? null;
+        if ($currentSeller && ($_SESSION['account_type'] ?? '') === 'seller' && $currentSeller == $aSellerId) {
+          $isEdit = true;
+          $editAuctionId = $aId;
+          $editItemId = $aItemId;
+          // persist edit mode into the session so POST submissions continue to act as edits
+          $_SESSION[$sessionKey]['is_edit'] = true;
+          $_SESSION[$sessionKey]['edit_auction_id'] = $editAuctionId;
+          $_SESSION[$sessionKey]['edit_item_id'] = $editItemId;
+
+          // Load item data
+          $itm = mysqli_prepare($connection, 'SELECT name, `condition`, description, photo, photo_base64, categoryId FROM Item WHERE itemId = ? LIMIT 1');
+          if ($itm) {
+            mysqli_stmt_bind_param($itm, 'i', $aItemId);
+            mysqli_stmt_execute($itm);
+            mysqli_stmt_store_result($itm);
+            if (mysqli_stmt_num_rows($itm) === 1) {
+              mysqli_stmt_bind_result($itm, $iName, $iCondition, $iDesc, $iPhoto, $iPhotoBase64, $iCategoryId);
+              mysqli_stmt_fetch($itm);
+              mysqli_stmt_close($itm);
+
+              // load category name
+              $catName = '';
+              if ($iCategoryId) {
+                $cst = mysqli_prepare($connection, 'SELECT name FROM Category WHERE categoryId = ? LIMIT 1');
+                if ($cst) {
+                  mysqli_stmt_bind_param($cst, 'i', $iCategoryId);
+                  mysqli_stmt_execute($cst);
+                  mysqli_stmt_bind_result($cst, $catName);
+                  mysqli_stmt_fetch($cst);
+                  mysqli_stmt_close($cst);
+                }
+              }
+
+              // Map DB values into the session form so existing UI code picks them up
+              $_SESSION[$sessionKey]['title'] = $_SESSION[$sessionKey]['title'] ?? $iName;
+              // map DB condition back to simple keys used in the form
+              $condKey = strtolower(str_replace(' ', '-', $iCondition));
+              $_SESSION[$sessionKey]['condition'] = $_SESSION[$sessionKey]['condition'] ?? $condKey;
+              $_SESSION[$sessionKey]['description'] = $_SESSION[$sessionKey]['description'] ?? $iDesc;
+              // try to map category name back to known frontend keys
+              $categoryMap = [
+                'electronics' => 'Electronics',
+                'fashion'     => 'Fashion',
+                'home'        => 'Home & Garden',
+                'sports'      => 'Sports',
+                'collectibles'=> 'Collectibles',
+                'automotive'  => 'Automotive',
+                'books'       => 'Books',
+                'jewelry'     => 'Jewelry'
+              ];
+              $inv = array_flip($categoryMap);
+              $key = $inv[$catName] ?? '';
+              $_SESSION[$sessionKey]['category'] = $_SESSION[$sessionKey]['category'] ?? $key;
+
+              $_SESSION[$sessionKey]['startingPrice'] = $_SESSION[$sessionKey]['startingPrice'] ?? $aStarting;
+              $_SESSION[$sessionKey]['reservePrice'] = $_SESSION[$sessionKey]['reservePrice'] ?? $aReserve;
+              $_SESSION[$sessionKey]['startDate'] = $_SESSION[$sessionKey]['startDate'] ?? date('Y-m-d\TH:i', strtotime($aStartDate));
+              $_SESSION[$sessionKey]['endDate'] = $_SESSION[$sessionKey]['endDate'] ?? date('Y-m-d\TH:i', strtotime($aEndDate));
+
+              // pick an existing photo path if available (prefer stored file path over base64)
+              if (!empty($iPhoto)) {
+                $_SESSION[$sessionKey]['temp_photo'] = $iPhoto;
+              } elseif (!empty($iPhotoBase64)) {
+                // create a data URL to preview base64 image in the UI (small convenience)
+                $_SESSION[$sessionKey]['temp_photo'] = 'data:image/*;base64,' . $iPhotoBase64;
+              }
+            } else {
+              mysqli_stmt_close($itm);
+            }
+          }
+        } else {
+          // not allowed to edit
+          $_SESSION['edit_error'] = 'Auction not found or you do not have permission to edit it.';
+          header('Location: mylistings.php');
+          exit;
+        }
+      } else {
+        mysqli_stmt_close($stmt);
+      }
+    }
+  }
+}
 // Merge POST into session on any submission (so Back/Next preserves values)
 $fields = ['title','description','category','condition','startingPrice','reservePrice','startDate','endDate'];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+  // restore edit-mode flags from session (if editing)
+  if (!empty($_SESSION[$sessionKey]['is_edit'])) {
+    $isEdit = true;
+    $editAuctionId = $_SESSION[$sessionKey]['edit_auction_id'] ?? $editAuctionId;
+    $editItemId = $_SESSION[$sessionKey]['edit_item_id'] ?? $editItemId;
+  }
+
   foreach ($fields as $f) {
     if (isset($_POST[$f])) {
       $_SESSION[$sessionKey][$f] = $_POST[$f];
@@ -189,42 +299,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['launch'])) {
         default: $dbCondition = ucwords(str_replace('-', ' ', $condition)); break;
       }
 
-      // Insert Item
-      if ($photoBase64 !== null) {
-        // ensure column exists: photo_base64 (MEDIUMTEXT)
-        $colCheck = mysqli_query($connection, "SHOW COLUMNS FROM Item LIKE 'photo_base64'");
-        if (!$colCheck || mysqli_num_rows($colCheck) === 0) {
-          mysqli_query($connection, "ALTER TABLE Item ADD COLUMN photo_base64 MEDIUMTEXT NULL");
-        }
-
-        $insItem = mysqli_prepare($connection, "INSERT INTO Item (name, `condition`, description, photo_base64, categoryId) VALUES (?, ?, ?, ?, ?)");
-        if ($insItem) {
-          mysqli_stmt_bind_param($insItem, 'ssssi', $title, $dbCondition, $description, $photoBase64, $categoryId);
-          if (!mysqli_stmt_execute($insItem)) {
-            $error = 'Database error inserting item (blob): ' . mysqli_error($connection);
-          } else {
-            $itemId = mysqli_insert_id($connection);
+      // Insert or Update Item
+      if (!empty($isEdit) && !empty($editItemId) && !empty($editAuctionId)) {
+        // Update existing Item
+        // ensure photo_base64 column exists if needed
+        if ($photoBase64 !== null) {
+          $colCheck = mysqli_query($connection, "SHOW COLUMNS FROM Item LIKE 'photo_base64'");
+          if (!$colCheck || mysqli_num_rows($colCheck) === 0) {
+            mysqli_query($connection, "ALTER TABLE Item ADD COLUMN photo_base64 MEDIUMTEXT NULL");
           }
-          mysqli_stmt_close($insItem);
+          $updItem = mysqli_prepare($connection, "UPDATE Item SET name = ?, `condition` = ?, description = ?, photo_base64 = ?, photo = NULL, categoryId = ? WHERE itemId = ?");
+          if ($updItem) {
+            mysqli_stmt_bind_param($updItem, 'ssssii', $title, $dbCondition, $description, $photoBase64, $categoryId, $editItemId);
+            if (!mysqli_stmt_execute($updItem)) {
+              $error = 'Database error updating item (blob): ' . mysqli_error($connection);
+            }
+            mysqli_stmt_close($updItem);
+          } else {
+            $error = 'Database error preparing item update (blob).';
+          }
         } else {
-          $error = 'Database error preparing item insert (blob).';
+          $updItem = mysqli_prepare($connection, "UPDATE Item SET name = ?, `condition` = ?, description = ?, photo = ?, categoryId = ? WHERE itemId = ?");
+          if ($updItem) {
+            mysqli_stmt_bind_param($updItem, 'ssssii', $title, $dbCondition, $description, $photoPath, $categoryId, $editItemId);
+            if (!mysqli_stmt_execute($updItem)) {
+              $error = 'Database error updating item: ' . mysqli_error($connection);
+            }
+            mysqli_stmt_close($updItem);
+          } else {
+            $error = 'Database error preparing item update.';
+          }
         }
+        $itemId = $editItemId;
       } else {
-        $insItem = mysqli_prepare($connection, "INSERT INTO Item (name, `condition`, description, photo, categoryId) VALUES (?, ?, ?, ?, ?)");
-        if ($insItem) {
-          mysqli_stmt_bind_param($insItem, 'ssssi', $title, $dbCondition, $description, $photoPath, $categoryId);
-          if (!mysqli_stmt_execute($insItem)) {
-            $error = 'Database error inserting item: ' . mysqli_error($connection);
-          } else {
-            $itemId = mysqli_insert_id($connection);
+        // Insert new Item
+        if ($photoBase64 !== null) {
+          // ensure column exists: photo_base64 (MEDIUMTEXT)
+          $colCheck = mysqli_query($connection, "SHOW COLUMNS FROM Item LIKE 'photo_base64'");
+          if (!$colCheck || mysqli_num_rows($colCheck) === 0) {
+            mysqli_query($connection, "ALTER TABLE Item ADD COLUMN photo_base64 MEDIUMTEXT NULL");
           }
-          mysqli_stmt_close($insItem);
+
+          $insItem = mysqli_prepare($connection, "INSERT INTO Item (name, `condition`, description, photo_base64, categoryId) VALUES (?, ?, ?, ?, ?)");
+          if ($insItem) {
+            mysqli_stmt_bind_param($insItem, 'ssssi', $title, $dbCondition, $description, $photoBase64, $categoryId);
+            if (!mysqli_stmt_execute($insItem)) {
+              $error = 'Database error inserting item (blob): ' . mysqli_error($connection);
+            } else {
+              $itemId = mysqli_insert_id($connection);
+            }
+            mysqli_stmt_close($insItem);
+          } else {
+            $error = 'Database error preparing item insert (blob).';
+          }
         } else {
-          $error = 'Database error preparing item insert.';
+          $insItem = mysqli_prepare($connection, "INSERT INTO Item (name, `condition`, description, photo, categoryId) VALUES (?, ?, ?, ?, ?)");
+          if ($insItem) {
+            mysqli_stmt_bind_param($insItem, 'ssssi', $title, $dbCondition, $description, $photoPath, $categoryId);
+            if (!mysqli_stmt_execute($insItem)) {
+              $error = 'Database error inserting item: ' . mysqli_error($connection);
+            } else {
+              $itemId = mysqli_insert_id($connection);
+            }
+            mysqli_stmt_close($insItem);
+          } else {
+            $error = 'Database error preparing item insert.';
+          }
         }
       }
     }
-
     if ($error === '') {
       // Normalize dates
       $sd = date('Y-m-d H:i:s', strtotime($startDate));
@@ -235,25 +378,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['launch'])) {
       elseif ($now >= $sd && $now <= $ed) $state = 'ongoing';
       else $state = 'expired';
 
-      // Insert Auction
-      $insAuction = mysqli_prepare($connection, "INSERT INTO Auction (sellerId, itemId, startingPrice, reservePrice, startDate, endDate, state) VALUES (?, ?, ?, ?, ?, ?, ?)");
-      if ($insAuction) {
-        // reserve may be NULL
+      // Insert or Update Auction
+      if (!empty($isEdit) && !empty($editAuctionId)) {
         $reserveParam = ($reservePrice === '' ? null : $reservePrice);
-        mysqli_stmt_bind_param($insAuction, 'iiddsss', $sellerId, $itemId, $startingPrice, $reserveParam, $sd, $ed, $state);
-        if (!mysqli_stmt_execute($insAuction)) {
-          $error = 'Database error inserting auction: ' . mysqli_error($connection);
+        $updAuction = mysqli_prepare($connection, "UPDATE Auction SET startingPrice = ?, reservePrice = ?, startDate = ?, endDate = ?, state = ? WHERE auctionId = ?");
+        if ($updAuction) {
+          mysqli_stmt_bind_param($updAuction, 'ddsssi', $startingPrice, $reserveParam, $sd, $ed, $state, $editAuctionId);
+          if (!mysqli_stmt_execute($updAuction)) {
+            $error = 'Database error updating auction: ' . mysqli_error($connection);
+          } else {
+            $success = 'Auction updated successfully. Redirecting to your listings...';
+            mysqli_stmt_close($updAuction);
+            unset($_SESSION[$sessionKey]);
+            $shouldRedirect = true;
+            $redirectUrl = 'mylistings.php?updated=1';
+          }
         } else {
-          // Show on-page success message and then auto-redirect after short delay
-          $success = 'Auction created successfully. Redirecting to listings...';
-          mysqli_stmt_close($insAuction);
-          // clear multi-step session data on successful creation
-          unset($_SESSION[$sessionKey]);
-          $shouldRedirect = true;
-          $redirectUrl = 'browse.php?created=1';
+          if ($error === '') $error = 'Database error preparing auction update.';
         }
       } else {
-        if ($error === '') $error = 'Database error preparing auction insert.';
+        $insAuction = mysqli_prepare($connection, "INSERT INTO Auction (sellerId, itemId, startingPrice, reservePrice, startDate, endDate, state) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        if ($insAuction) {
+          // reserve may be NULL
+          $reserveParam = ($reservePrice === '' ? null : $reservePrice);
+          mysqli_stmt_bind_param($insAuction, 'iiddsss', $sellerId, $itemId, $startingPrice, $reserveParam, $sd, $ed, $state);
+          if (!mysqli_stmt_execute($insAuction)) {
+            $error = 'Database error inserting auction: ' . mysqli_error($connection);
+          } else {
+            // Show on-page success message and then auto-redirect after short delay
+            $success = 'Auction created successfully. Redirecting to listings...';
+            mysqli_stmt_close($insAuction);
+            // clear multi-step session data on successful creation
+            unset($_SESSION[$sessionKey]);
+            $shouldRedirect = true;
+            $redirectUrl = 'mylistings.php?created=1';
+          }
+        } else {
+          if ($error === '') $error = 'Database error preparing auction insert.';
+        }
       }
     }
   }
