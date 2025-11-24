@@ -1,5 +1,6 @@
 <?php
 include "database.php";
+date_default_timezone_set('Europe/London');
 
 // Ensure session for multi-step persistence
 if (session_status() === PHP_SESSION_NONE) session_start();
@@ -123,6 +124,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $isEdit = true;
     $editAuctionId = $_SESSION[$sessionKey]['edit_auction_id'] ?? $editAuctionId;
     $editItemId = $_SESSION[$sessionKey]['edit_item_id'] ?? $editItemId;
+  }
+
+  // Handle Cancel action: clear the multi-step form session and return to listings
+  if (isset($_POST['cancel'])) {
+    unset($_SESSION[$sessionKey]);
+    header('Location: mylistings.php');
+    exit;
   }
 
   foreach ($fields as $f) {
@@ -269,6 +277,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['launch'])) {
     if ($error === '') {
       $photoPath = $_SESSION[$sessionKey]['temp_photo'] ?? null;
       $photoBase64 = null;
+
+      // Enforce that a photo exists (either temp path from earlier step or a newly uploaded file)
+      if (empty($photoPath) && !(isset($_FILES['imageInput']) && is_uploaded_file($_FILES['imageInput']['tmp_name']))) {
+        $error = 'Please upload at least one photo for your listing.';
+      }
 
       // If we have a temp photo path but file doesn't exist (permissions),
       // attempt to read the original uploaded tmp file from PHP upload data
@@ -490,7 +503,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['launch'])) {
   </div>
 
   <!-- Multi-step Form -->
-  <form method="POST" enctype="multipart/form-data" class="space-y-6">
+  <form id="createAuctionForm" method="POST" enctype="multipart/form-data" class="space-y-6">
 
     <input type="hidden" name="currentStep" id="currentStep" value="<?php echo $currentStep; ?>">
     <!-- Persist values across steps -->
@@ -576,11 +589,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['launch'])) {
           </div>
         </div>
 
-        <div class="flex justify-end pt-4">
-          <button type="submit" onclick="goStep(2)"
-            class="px-8 py-3 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-xl">
-            Continue to Images
+        <div class="flex justify-between pt-4">
+          <button type="submit" name="cancel" value="1"
+            onclick="document.getElementById('createAuctionForm').noValidate = true;"
+            class="px-8 py-3 bg-red-50 text-red-700 rounded-xl">
+            Cancel
           </button>
+
+          <div>
+            <button type="submit" onclick="goStep(2)"
+              class="px-8 py-3 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-xl">
+              Continue to Images
+            </button>
+          </div>
         </div>
       </div>
     <?php endif; ?>
@@ -589,7 +610,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['launch'])) {
     <?php if ($currentStep == 2): ?>
       <div class="bg-white rounded-2xl shadow-lg p-8 border border-gray-100 space-y-6">
 
-        <h2 class="text-gray-900 mb-2">Upload Photos</h2>
+        <h2 class="text-gray-900 mb-2">Upload Photos *</h2>
 
         <!-- Image Preview Container -->
         <div id="imagePreviewContainer" class="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -620,7 +641,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['launch'])) {
         <div class="flex justify-between pt-4">
           <button type="button" onclick="submitStep(1, false)"
             class="px-8 py-3 bg-gray-100 text-gray-700 rounded-xl">Back</button>
-          <button type="submit" onclick="goStep(3)"
+          <button type="submit" onclick="return validateStep3()"
             class="px-8 py-3 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-xl">
             Continue to Pricing
           </button>
@@ -773,6 +794,26 @@ if (input) {
 // Wire up Add/Replace buttons to trigger file chooser
 const addBtn = document.getElementById('addPhotoBtn');
 if (addBtn && input) addBtn.addEventListener('click', () => input.click());
+</script>
+
+<!-- Photo presence validation: prevent moving to Step 3 unless a photo exists -->
+<script>
+function validateStep3() {
+  var form = document.getElementById('createAuctionForm');
+  var input = document.getElementById('imageInput');
+  var preview = document.getElementById('imagePreviewContainer');
+
+  var hasPreview = preview && preview.children && preview.children.length > 0;
+  var hasFile = input && input.files && input.files.length > 0;
+
+  if (hasPreview || hasFile) {
+    document.getElementById('currentStep').value = 3;
+    return true; // allow submit
+  }
+
+  alert('Please upload at least one photo before continuing.');
+  return false; // block submit
+}
 </script>
 
 <!-- Category selection visual update (client-side) -->

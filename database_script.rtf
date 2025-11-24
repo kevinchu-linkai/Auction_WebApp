@@ -86,6 +86,7 @@ CREATE TABLE Review (
     sellerId INT NOT NULL,
     comment TEXT,
     rate INT CHECK (rate BETWEEN 1 AND 5),
+    date DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (auctionId) REFERENCES Auction(auctionId)
         ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY (sellerId) REFERENCES Seller(sellerId)
