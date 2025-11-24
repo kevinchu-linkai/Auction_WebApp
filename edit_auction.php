@@ -2,6 +2,8 @@
 // DB-backed edit page: loads Auction and Item for ?edit=<auctionId>, validates seller ownership,
 // pre-fills the form and updates Item/Auction on submit.
 
+date_default_timezone_set('Europe/London');
+
 session_start();
 require_once 'database.php';
 
