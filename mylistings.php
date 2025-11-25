@@ -1,9 +1,15 @@
 <?php include_once("header.php")?>
 <?php require("utilities.php")?>
 
-<div class="container">
+<!-- 添加整体样式容器 -->
+<div class="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 p-6">
+<div class="max-w-7xl mx-auto">
 
-<h2 class="my-3">My listings</h2>
+<!-- 修改标题部分 -->
+<div class="text-center mb-8">
+  <h1 class="text-gray-900 mb-3 text-3xl font-semibold">My Auction Listings</h1>
+  <p class="text-gray-600">Manage your auctions and track their performance</p>
+</div>
 
 <?php
 
@@ -46,26 +52,24 @@ function renderStatsOverview($auctions) {
     }
     
     $stats = [
-        ['label' => 'Active Auctions', 'value' => $activeCount, 'icon' => 'clock', 'color' => 'success'],
-        ['label' => 'Ended Auctions', 'value' => $endedCount, 'icon' => 'check-circle', 'color' => 'secondary'],
-        ['label' => 'Upcoming', 'value' => $upcomingCount, 'icon' => 'package', 'color' => 'info'],
-        ['label' => 'Cancelled', 'value' => $cancelledCount, 'icon' => 'x-circle', 'color' => 'danger'],
-        ['label' => 'Total Bids', 'value' => $totalBids, 'icon' => 'trending-up', 'color' => 'primary']
+        ['label' => 'Active Auctions', 'value' => $activeCount, 'icon' => 'clock', 'color' => 'green'],
+        ['label' => 'Ended Auctions', 'value' => $endedCount, 'icon' => 'check-circle', 'color' => 'gray'],
+        ['label' => 'Upcoming', 'value' => $upcomingCount, 'icon' => 'package', 'color' => 'blue'],
+        ['label' => 'Cancelled', 'value' => $cancelledCount, 'icon' => 'x-circle', 'color' => 'red'],
+        ['label' => 'Total Bids', 'value' => $totalBids, 'icon' => 'trending-up', 'color' => 'purple']
     ];
     
-    echo '<div class="row mb-4">';
+    echo '<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">';
     foreach ($stats as $stat) {
         echo '
-        <div class="col-sm-6 col-lg-3 mb-3">
-            <div class="card">
-                <div class="card-body d-flex justify-content-between align-items-center">
-                    <div>
-                        <h6 class="card-subtitle text-muted">' . htmlspecialchars($stat['label']) . '</h6>
-                        <h3 class="card-title">' . intval($stat['value']) . '</h3>
-                    </div>
-                    <div class="text-' . $stat['color'] . '">
-                        <i data-feather="' . $stat['icon'] . '"></i>
-                    </div>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div class="flex justify-between items-center">
+                <div>
+                    <div class="text-gray-500 text-sm mb-1">' . htmlspecialchars($stat['label']) . '</div>
+                    <div class="text-2xl font-bold text-gray-900">' . intval($stat['value']) . '</div>
+                </div>
+                <div class="text-' . $stat['color'] . '-600">
+                    <i data-feather="' . $stat['icon'] . '" class="w-6 h-6"></i>
                 </div>
             </div>
         </div>';
@@ -86,123 +90,135 @@ function renderStatsOverview($auctions) {
 
     // Insert filter bar component function - indent one level within the else block
     function renderFilterBar($filterStatus, $sortBy) {
-        echo '
-        <div class="card mb-4">
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6 mb-2">
-                        <div class="input-group">
-                            <span class="input-group-text"><i data-feather="filter"></i></span>
-                            <select class="form-select" id="filterStatus" onchange="applyFilters()">
-                                <option value="all" ' . ($filterStatus === 'all' ? 'selected' : '') . '>All Auctions</option>
-                                <option value="not-started" ' . ($filterStatus === 'not-started' ? 'selected' : '') . '>Not Started</option>
-                                <option value="ongoing" ' . ($filterStatus === 'ongoing' ? 'selected' : '') . '>Ongoing</option>
-                                <option value="finished" ' . ($filterStatus === 'finished' ? 'selected' : '') . '>Finished</option>
-                                <option value="cancelled" ' . ($filterStatus === 'cancelled' ? 'selected' : '') . '>Cancelled</option>
-                                <option value="expired" ' . ($filterStatus === 'expired' ? 'selected' : '') . '>Expired</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-md-6 mb-2">
-                        <div class="input-group">
-                            <span class="input-group-text"><i data-feather="arrow-up-down"></i></span>
-                            <select class="form-select" id="sortBy" onchange="applyFilters()">
-                                <option value="endDate" ' . ($sortBy === 'endDate' ? 'selected' : '') . '>End Date</option>
-                                <option value="bidCount" ' . ($sortBy === 'bidCount' ? 'selected' : '') . '>Most Bids</option>
-                                <option value="currentBid" ' . ($sortBy === 'currentBid' ? 'selected' : '') . '>Highest Bid</option>
-                            </select>
-                        </div>
-                    </div>
+    echo '
+    <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+            
+            <!-- 状态过滤 -->
+            <div class="md:col-span-6">
+                <div class="relative">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                        <i data-feather="filter" class="w-5 h-5"></i>
+                    </span>
+                    <select class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white" 
+                            id="filterStatus" onchange="applyFilters()">
+                        <option value="all" ' . ($filterStatus === 'all' ? 'selected' : '') . '>All Auctions</option>
+                        <option value="not-started" ' . ($filterStatus === 'not-started' ? 'selected' : '') . '>Not Started</option>
+                        <option value="ongoing" ' . ($filterStatus === 'ongoing' ? 'selected' : '') . '>Ongoing</option>
+                        <option value="finished" ' . ($filterStatus === 'finished' ? 'selected' : '') . '>Finished</option>
+                        <option value="cancelled" ' . ($filterStatus === 'cancelled' ? 'selected' : '') . '>Cancelled</option>
+                        <option value="expired" ' . ($filterStatus === 'expired' ? 'selected' : '') . '>Expired</option>
+                    </select>
                 </div>
             </div>
-        </div>';
-    }
+
+            <!-- 排序选项 -->
+            <div class="md:col-span-6">
+                <div class="relative">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                        <i data-feather="arrow-up-down" class="w-5 h-5"></i>
+                    </span>
+                    <select class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white" 
+                            id="sortBy" onchange="applyFilters()">
+                        <option value="endDate" ' . ($sortBy === 'endDate' ? 'selected' : '') . '>End Date</option>
+                        <option value="bidCount" ' . ($sortBy === 'bidCount' ? 'selected' : '') . '>Most Bids</option>
+                        <option value="currentBid" ' . ($sortBy === 'currentBid' ? 'selected' : '') . '>Highest Bid</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>';
+}
     // 拍卖卡片组件函数 - 与过滤栏同级缩进
     function renderAuctionCard($auction) {
-    // 状态映射
-    // 直接使用数据库状态
     $status = $auction['state'];
-
-    // 状态颜色映射（基于数据库状态）
     $statusColors = [
-        'not-started' => 'info',
-        'ongoing' => 'success',
-        'finished' => 'secondary',
-        'cancelled' => 'danger',
-        'expired' => 'warning'
+        'not-started' => 'bg-blue-100 text-blue-700',
+        'ongoing' => 'bg-green-100 text-green-700', 
+        'finished' => 'bg-gray-100 text-gray-700',
+        'cancelled' => 'bg-red-100 text-red-700',
+        'expired' => 'bg-yellow-100 text-yellow-700'
     ];
-
-    $colorClass = $statusColors[$status] ?? 'secondary';
     
-    // 计算剩余时间
+    $statusClass = $statusColors[$status] ?? 'bg-gray-100 text-gray-700';
+    $statusLabel = ucfirst(str_replace('-', ' ', $status));
     $timeRemaining = getTimeRemaining($auction['endDate']);
-        
+    
     echo '
-    <div class="col-lg-4 col-md-6 mb-4" data-status="' . $status . '" 
-          data-end-date="' . strtotime($auction['endDate']) . '"
-          data-bid-count="' . $auction['bidCount'] . '"
-          data-current-bid="' . $auction['currentBid'] . '">
-        <div class="card h-100 auction-card">
-            <!-- 添加图片显示 -->
-            <div class="card-img-top position-relative" style="height: 200px; overflow: hidden;">
-                
-                <div class="position-absolute top-0 end-0 m-2">
-                    <span class="badge bg-' . $colorClass . '">' . ucfirst(str_replace('-', ' ', $status)) . '</span>
+    <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-all" 
+         data-status="' . $status . '" data-end-date="' . strtotime($auction['endDate']) . '"
+         data-bid-count="' . $auction['bidCount'] . '"
+         data-current-bid="' . $auction['currentBid'] . '">
+        
+        <!-- 卡片头部 -->
+        <div class="p-6 border-b border-gray-100">
+            <div class="flex justify-between items-start mb-3">
+                <h3 class="text-xl font-semibold text-gray-900">' . htmlspecialchars($auction['itemName']) . '</h3>
+                <span class="px-3 py-1 rounded-full text-xs font-medium ' . $statusClass . '">' . $statusLabel . '</span>
+            </div>
+            <p class="text-gray-600 text-sm">Auction ID: ' . intval($auction['auctionId']) . '</p>
+        </div>
+
+        <!-- 价格信息 -->
+        <div class="p-6">
+            ' . ($status === 'not-started' ? '
+            <div class="mb-4">
+                <div class="text-sm text-gray-500 mb-1">Starting Bid</div>
+                <div class="text-2xl font-bold text-gray-900">$' . number_format($auction['startingPrice'], 2) . '</div>
+                ' . ($auction['reservePrice'] > 0 ? '<div class="text-xs text-gray-500 mt-1">Reserve: $' . number_format($auction['reservePrice'], 2) . '</div>' : '') . '
+            </div>' : '
+            <div class="mb-4">
+                <div class="text-sm text-gray-500 mb-1">Current Bid</div>
+                <div class="text-2xl font-bold text-green-600">$' . number_format($auction['currentBid'], 2) . '</div>
+                ' . ($auction['reservePrice'] > 0 ? '<div class="text-xs text-gray-500 mt-1">Reserve: $' . number_format($auction['reservePrice'], 2) . '</div>' : '') . '
+            </div>') . '
+
+            <!-- 时间信息 -->
+            <div class="flex justify-between items-center text-sm text-gray-600 mb-4">
+                <div class="flex items-center gap-1">
+                    <i data-feather="clock" class="w-4 h-4"></i>
+                    <span>' . htmlspecialchars($timeRemaining) . '</span>
+                </div>
+                <div class="flex items-center gap-1">
+                    <i data-feather="trending-up" class="w-4 h-4"></i>
+                    <span>' . intval($auction['bidCount']) . ' bids</span>
                 </div>
             </div>
-            <div class="card-body d-flex flex-column">
-                <h5 class="card-title">' . htmlspecialchars($auction['itemName']) . '</h5>
-                
-                <p class="card-text text-muted small">Auction ID: ' . intval($auction['auctionId']) . '</p>
-                
-                ' . ($status === 'not-started' ? '
-                <div class="mb-3">
-                    <small class="text-muted">Starting Bid</small>
-                    <div class="h5 text-dark">$' . number_format($auction['startingPrice'], 2) . '</div>
-                    ' . ($auction['reservePrice'] > 0 ? '<small class="text-muted">Reserve: $' . number_format($auction['reservePrice'], 2) . '</small>' : '') . '
-                </div>' : '
-                <div class="mb-3">
-                    <small class="text-muted">Current Bid</small>
-                    <div class="h5 text-dark">$' . number_format($auction['currentBid'], 2) . '</div>
-                    ' . ($auction['reservePrice'] > 0 ? '<small class="text-muted">Reserve: $' . number_format($auction['reservePrice'], 2) . '</small>' : '') . '
-                </div>') . '
-                
-                <div class="d-flex justify-content-between text-muted small mb-3">
-                    <div class="d-flex align-items-center">
-                        <i data-feather="clock" class="me-1"></i>
-                        <span>' . htmlspecialchars($timeRemaining) . '</span>
-                    </div>
-                    <div class="d-flex align-items-center">
-                        <i data-feather="trending-up" class="me-1"></i>
-                        <span>' . intval($auction['bidCount']) . ' bids</span>
-                    </div>
+
+            <!-- 日期信息 -->
+            <div class="text-xs text-gray-500 space-y-1 mb-4">
+                <div class="flex justify-between">
+                    <span>Start:</span>
+                    <span>' . htmlspecialchars($auction['startDate']) . '</span>
                 </div>
+                <div class="flex justify-between">
+                    <span>End:</span>
+                    <span>' . htmlspecialchars($auction['endDate']) . '</span>
+                </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="flex gap-3">
+                <a href="listing.php?auctionId=' . $auction['auctionId'] . '&from=mylistings" 
+                    class="flex-1 bg-gradient-to-r from-purple-500 to-blue-500 text-white text-center py-2.5 rounded-xl hover:shadow-lg transition-all font-medium">
+                    View Details
+                </a>
+                <a href="edit_auction.php?edit=' . $auction['auctionId'] . '" 
+                   class="flex-1 bg-gray-100 text-gray-700 text-center py-2.5 rounded-xl hover:bg-gray-200 transition-all font-medium">
+                    Edit
+                </a>';
                 
-                <p class="card-text small text-muted mb-3">
-                    Start: ' . htmlspecialchars($auction['startDate']) . '<br>
-                    End: ' . htmlspecialchars($auction['endDate']) . '
-                </p>
-                
-                <div class="mt-auto d-flex gap-2">
-                    <a href="listing.php?auctionId=' . $auction['auctionId'] . '" class="btn btn-outline-primary flex-fill d-flex align-items-center justify-content-center">
-                        <i data-feather="eye" class="me-1"></i>View
-                    </a>
-                    <a href="edit_auction.php?edit=' . $auction['auctionId'] . '" class="btn btn-outline-secondary flex-fill d-flex align-items-center justify-content-center">
-                        <i data-feather="edit" class="me-1"></i>Edit
-                    </a>';
-                    
     if ($auction['state'] !== 'cancelled' && $auction['state'] !== 'finished' && $auction['state'] !== 'expired') {
         echo '
-                    <form method="POST" action="cancel_auction.php" class="d-inline flex-fill" onsubmit="return confirm(\'Cancel this auction? This cannot be undone.\');">
-                        <input type="hidden" name="auctionId" value="' . $auction['auctionId'] . '">
-                        <button type="submit" class="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center">
-                            <i data-feather="x" class="me-1"></i>Cancel
-                        </button>
-                    </form>';
+                <form method="POST" action="cancel_auction.php" class="flex-1" onsubmit="return confirm(\'Cancel this auction? This cannot be undone.\');">
+                    <input type="hidden" name="auctionId" value="' . $auction['auctionId'] . '">
+                    <button type="submit" class="w-full bg-red-100 text-red-700 py-2.5 rounded-xl hover:bg-red-200 transition-all font-medium">
+                        Cancel
+                    </button>
+                </form>';
     }
     
     echo '
-                </div>
             </div>
         </div>
     </div>';
@@ -264,7 +280,7 @@ function renderStatsOverview($auctions) {
         renderFilterBar($filterStatus, $sortBy);
         
         // 显示拍卖列表
-        echo '<div class="row" id="auctions-container">';
+        echo '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="auctions-container">';
         
         if ($hasAny) {
             // 应用过滤和排序
@@ -303,6 +319,7 @@ function renderStatsOverview($auctions) {
 }
 ?>
 
+<script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/feather-icons"></script>
 <script>
 // 初始化Feather图标
@@ -321,5 +338,8 @@ function applyFilters() {
     window.location.href = url.toString();
 }
 </script>
+
+</div> <!-- 关闭max-w-7xl容器 -->
+</div> <!-- 关闭背景渐变容器 -->
 
 <?php include_once("footer.php")?>
