@@ -184,11 +184,11 @@
                                     id="startingPrice"
                                     name="startingPrice"
                                     type="number"
-                                    step="0.01"
+                                    step="1"
                                     min="0"
                                     value="<?= htmlspecialchars($auctionData['startingPrice']) ?>"
                                     class="w-full pl-8 pr-3 py-2 bg-white border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
-                                    placeholder="0.00"
+                                    placeholder="0"
                                     required
                                 />
                             </div>
@@ -205,7 +205,7 @@
                                     id="reservePrice"
                                     name="reservePrice"
                                     type="number"
-                                    step="0.01"
+                                    step="1"
                                     min="0"
                                     value="<?= htmlspecialchars($auctionData['reservePrice']) ?>"
                                     class="w-full pl-8 pr-3 py-2 bg-white border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"

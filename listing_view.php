@@ -19,9 +19,15 @@
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="mb-6">
-        <a href="mylistings.php" class="inline-flex items-center text-sm text-gray-600 hover:text-gray-800">
-            &larr;&nbsp;Back to My listings
-        </a>
+        <?php if (isset($fromPage) && $fromPage === 'mylistings'): ?>
+            <a href="mylistings.php" class="inline-flex items-center text-sm text-gray-600 hover:text-gray-800">
+                &larr;&nbsp;Back to My listings
+            </a>
+        <?php else: ?>
+            <a href="browse.php" class="inline-flex items-center text-sm text-gray-600 hover:text-gray-800">
+                &larr;&nbsp;Back to Browsing
+            </a>
+        <?php endif; ?>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <!-- Left Column - Image Gallery -->
@@ -148,42 +154,35 @@
 
             <!-- Current Bid summary (all states) -->
             <div class="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-
                 <div class="flex items-baseline justify-between">
                     <span class="text-gray-600">Starting Price</span>
-
                     <div class="flex items-baseline gap-2">
                         <span class="text-2xl text-gray-900">
-                            $<?= number_format($startingPrice, 2) ?>
+                            $<?= number_format($startingPrice) ?>
                         </span>
                         <span class="text-gray-500">USD</span>
                     </div>
                 </div>
-
                 <?php if (count($bidHistory) > 0): ?>
                     <div class="flex items-baseline justify-between pt-4 border-t border-gray-200">
                         <span class="text-gray-600">Current Bid</span>
-
                         <div class="flex items-baseline gap-2">
                             <span class="text-3xl">
-                                $<?= number_format($currentBid, 2) ?>
+                                $<?= number_format($currentBid) ?>
                             </span>
                             <span class="text-gray-500">USD</span>
                         </div>
                     </div>
                 <?php endif; ?>
-
-                <?php if (!empty($reservePrice) && $reservePrice > 0): ?>
+                <?php if (!empty($reservePrice) && $reservePrice > 0 && isset($_SESSION['account_type']) && $_SESSION['account_type'] === 'seller'): ?>
                     <div class="flex items-baseline justify-between">
                         <span class="text-gray-600">Reserve Price</span>
-
                         <div class="flex items-baseline gap-2">
-                            <span class="text-2xl text-gray-900">$<?= number_format($reservePrice, 2) ?></span>
+                            <span class="text-2xl text-gray-900">$<?= number_format($reservePrice) ?></span>
                             <span class="text-gray-500">USD</span>
                         </div>
                     </div>
                 <?php endif; ?>
-
                 <p class="text-gray-500">
                     <?php if (count($bidHistory) === 0): ?>
                         No bids yet
@@ -192,7 +191,116 @@
                     <?php endif; ?>
                 </p>
 
+                <?php if (isset($_SESSION['account_type']) && $_SESSION['account_type'] === 'buyer' && $displayStatus === 'ongoing'): ?>
+                    <!-- Bid Form (Buyer Only, Ongoing Auctions) -->
+                    <form method="POST" action="place_bid.php" class="space-y-4 pt-4 border-t border-gray-200">
+                        <input type="hidden" name="auction_id" value="<?= $auctionId ?>">
+                        
+                        <div>
+                            <label for="bid-amount" class="block text-gray-700 mb-2">
+                                Your Bid Amount
+                            </label>
+
+                            <div class="relative">
+                                <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+
+                                <input
+                                    id="bid-amount"
+                                    name="bid_amount"
+                                    type="number"
+                                    class="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    min="<?= $minBid ?>"
+                                    step="1"
+                                    value="<?= isset($_POST['bid_amount']) ? htmlspecialchars($_POST['bid_amount']) : $minBid ?>"
+                                    required
+                                />
+                            </div>
+
+                            <?php if (!empty($error)): ?>
+                                <p class="text-red-600 mt-2"><?= htmlspecialchars($error) ?></p>
+                            <?php endif; ?>
+                            
+                            <?php if (isset($_SESSION['error'])): ?>
+                                <p class="text-red-600 mt-2"><?= htmlspecialchars($_SESSION['error']) ?></p>
+                                <?php unset($_SESSION['error']); ?>
+                            <?php endif; ?>
+                            
+                            <?php if (isset($_SESSION['success'])): ?>
+                                <p class="text-green-600 mt-2"><?= htmlspecialchars($_SESSION['success']) ?></p>
+                                <?php unset($_SESSION['success']); ?>
+                            <?php endif; ?>
+
+                            <p class="text-gray-500 mt-2">
+                                Minimum bid: $<?= number_format($minBid) ?>
+                            </p>
+                        </div>
+
+                        <button
+                            type="submit"
+                            class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
+                        >
+                            <!-- Replace <Gavel /> icon -->
+                            <span class="text-white">🔨</span>
+                            Place Bid
+                        </button>
+                    </form>
+                <?php endif; ?>
             </div>
+
+            <?php if (isset($_SESSION['account_type']) && $_SESSION['account_type'] === 'buyer'): ?>
+                <?php
+                // Seller info block (replace with DB values if available)
+                $sellerName = $sellerName ?? ($sellerNameFromDb ?? "James Wilson");
+                $rating = $rating ?? ($sellerRatingFromDb ?? 4.3);
+                $totalRatings = $totalRatings ?? ($sellerTotalRatingsFromDb ?? 128);
+
+                // Generate initials automatically (e.g., James Wilson → JW)
+                $nameParts = explode(' ', $sellerName);
+                $initials = strtoupper(substr($nameParts[0], 0, 1) . (isset($nameParts[1]) ? substr($nameParts[1], 0, 1) : ''));
+                ?>
+                <div class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+                    <div class="flex items-center gap-2 mb-6">
+                        <span class="w-5 h-5 text-gray-600">👤</span>
+                        <h3 class="text-lg font-semibold">Seller Information</h3>
+                    </div>
+                    <div class="space-y-4">
+                        <!-- Seller Avatar & Name -->
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-white text-lg font-bold">
+                                <?= $initials ?>
+                            </div>
+                            <div>
+                                <div class="font-medium"><?= htmlspecialchars($sellerName) ?></div>
+                            </div>
+                        </div>
+                        <!-- Ratings -->
+                        <div class="pt-4 border-t border-gray-200">
+                            <div class="flex items-center gap-2 mb-2">
+                                <div class="flex items-center gap-1">
+                                    <?php for ($star = 1; $star <= 5; $star++): ?>
+                                        <?php
+                                        if ($star <= floor($rating)) {
+                                            // Full star
+                                            echo '<span class="w-5 h-5 text-yellow-400">★</span>';
+                                        } elseif ($star - $rating < 1) {
+                                            // Partial star treated as full
+                                            echo '<span class="w-5 h-5 text-yellow-400">★</span>';
+                                        } else {
+                                            // Empty star
+                                            echo '<span class="w-5 h-5 text-gray-300">★</span>';
+                                        }
+                                        ?>
+                                    <?php endfor; ?>
+                                </div>
+                                <span><?= number_format($rating, 1) ?></span>
+                            </div>
+                            <p class="text-gray-500">
+                                Based on <?= number_format($totalRatings) ?> ratings
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
 
             <!-- ItemDetails -->
             <div class="bg-white rounded-lg border border-gray-200 p-6">
@@ -218,7 +326,7 @@
     </div>
 
     <!-- Bid History -->
-    <?php if (in_array($displayStatus, ['ongoing', 'finished', 'expired'], true)): ?>
+    <?php if (in_array($displayStatus, ['ongoing', 'finished', 'expired'], true) && count($bidHistory) > 0): ?>
         <div class="mt-12">
             <div class="bg-white rounded-lg border border-gray-200">
                 <div class="p-6 border-b border-gray-200">
@@ -249,7 +357,7 @@
                                 </div>
                             </div>
                             <div class="<?= $index === 0 ? 'text-blue-900 font-semibold' : 'text-gray-900' ?>">
-                                $<?= number_format($bid['amount'], 2) ?>
+                                $<?= number_format($bid['amount']) ?>
                             </div>
                         </div>
                     <?php endforeach; ?>

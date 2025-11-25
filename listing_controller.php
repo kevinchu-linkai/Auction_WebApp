@@ -21,6 +21,10 @@ if (isset($_GET['auctionId'])) {
 } elseif (isset($_GET['id'])) {
     $auctionId = (int) $_GET['id'];
 }
+
+// Check where the user came from (for back button logic)
+$fromPage = $_GET['from'] ?? 'browse'; // default to 'browse'
+
 if ($auctionId <= 0) {
     http_response_code(400);
     ?>
@@ -69,6 +73,32 @@ if ($res->num_rows === 0) {
 $row = $res->fetch_assoc();
 $stmt->close();
 
+// --- Seller Info ---
+$sellerName = "";
+$memberSince = "";
+$rating = null;
+$totalRatings = 0;
+
+// Get seller name and member since
+$sellerIdForInfo = isset($row['sellerId']) ? (int)$row['sellerId'] : 0;
+if ($sellerIdForInfo > 0) {
+    $stmt = $connection->prepare('SELECT Seller.username, DATE_FORMAT(MIN(Auction.startDate), "%Y") as memberSince FROM Seller LEFT JOIN Auction ON Seller.sellerId = Auction.sellerId WHERE Seller.sellerId = ?');
+    $stmt->bind_param('i', $sellerIdForInfo);
+    $stmt->execute();
+    $stmt->bind_result($sellerName, $memberSince);
+    $stmt->fetch();
+    $stmt->close();
+
+     // Get average rating and total ratings for this seller
+     $stmt = $connection->prepare('SELECT AVG(rate) as avgRating, COUNT(*) as totalRatings FROM Review WHERE sellerId = ? AND rate IS NOT NULL');
+     $stmt->bind_param('i', $sellerIdForInfo);
+     $stmt->execute();
+     $stmt->bind_result($rating, $totalRatings);
+     $stmt->fetch();
+     $stmt->close();
+     if ($rating === null) $rating = 0;
+}
+
 // parse times and state
 // `dbState` is the authoritative state stored in the Auction table.
 $dbState = $row['state'];
@@ -103,8 +133,8 @@ $stmt->bind_param('i', $auctionId);
 $stmt->execute();
 $r = $stmt->get_result()->fetch_assoc();
 $stmt->close();
-$maxBid = $r['maxBid'] !== null ? (float)$r['maxBid'] : null;
-$startingPrice = isset($row['startingPrice']) ? (float)$row['startingPrice'] : 0.0;
+$maxBid = $r['maxBid'] !== null ? (int)$r['maxBid'] : null;
+$startingPrice = isset($row['startingPrice']) ? (int)$row['startingPrice'] : 0;
 $currentBid = $maxBid !== null ? $maxBid : $startingPrice;
 
 // handle POST actions (relist or place bid)
@@ -199,7 +229,7 @@ $res = $stmt->get_result();
 while ($br = $res->fetch_assoc()) {
     $bids[] = [
         'bidder' => $br['bidder'],
-        'amount' => (float)$br['bidAmount'],
+        'amount' => (int)$br['bidAmount'],
         'timestamp' => strtotime($br['bidTime']),
     ];
 }
@@ -212,8 +242,8 @@ $item_condition = $row['item_condition'] ?? '';
 $current_price = $currentBid;
 $num_bids = count($bids);
 $bidHistory = $bids;
-$minBid = $currentBid + 50;
-$reservePrice = array_key_exists('reservePrice', $row) ? (float)$row['reservePrice'] : null;
+$minBid = $currentBid + 1;
+$reservePrice = array_key_exists('reservePrice', $row) ? (int)$row['reservePrice'] : null;
 $photo = $row['photo'] ?? '';
 $photoUrl = $photo ? $photo : 'https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?w=800&q=80';
 

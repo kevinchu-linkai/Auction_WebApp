@@ -1,238 +1,113 @@
 <?php
+/**
+ * Place Bid - Handles bid submission
+ * Validates bid amount and inserts into Bid table
+ */
 
-// TODO: Extract $_POST variables, check they're OK, and attempt to make a bid.
-// Notify user of success/failure and redirect/give navigation options.
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
-include_once("header.php");
+require_once 'database.php';
 
-// Check user authentication
+// Check if user is logged in as buyer
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    header("Location: login.php");
+    header('Location: login.php');
     exit;
 }
 
-if ($_SESSION['account_type'] !== 'buyer') {
-    die('<div class="container alert alert-danger mt-3">Only buyers can place bids. 
-         <a href="index.php">Return to homepage</a></div>');
-}
-
-// Initialize variables
-$auctionId = 0;
-$itemName = '';
-$startingPrice = 0;
-$reservePrice = 0;
-$currentPrice = 0;
-$state = '';
-$minBid = 0;
-$error = '';
-$success = false;
-
-// Process form submission if it's a POST request
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Extract and validate POST variables
-    $auctionId = intval($_POST['auction_id'] ?? 0);
-    $bidAmount = floatval($_POST['bid_amount'] ?? 0);
-    $buyerId = intval($_SESSION['user_id']);
-    
-    // Check if POST variables are OK
-    if ($auctionId <= 0 || $bidAmount <= 0) {
-        $error = "Invalid bid data.";
-    } else {
-        // Attempt to make a bid
-        $checkSql = "SELECT a.state, a.startingPrice, a.reservePrice,
-                    (SELECT MAX(bidAmount) FROM Bid WHERE auctionId = a.auctionId) as currentMax,
-                    i.name as itemName
-                    FROM Auction a
-                    JOIN Item i ON a.itemId = i.itemId
-                    WHERE a.auctionId = ?";
-        
-        $stmt = mysqli_prepare($connection, $checkSql);
-        mysqli_stmt_bind_param($stmt, 'i', $auctionId);
-        mysqli_stmt_execute($stmt);
-        mysqli_stmt_bind_result($stmt, $state, $startingPrice, $reservePrice, $currentMax, $itemName);
-        
-        if (!mysqli_stmt_fetch($stmt)) {
-            $error = "Auction does not exist.";
-        } else {
-            // Auction status verification
-            if ($state === 'finished' || $state === 'expired') {
-                $error = "Auction has ended. Cannot place bid.";
-            } 
-            elseif ($state === 'cancelled') {
-                $error = "Auction has been cancelled. Cannot place bid.";
-            }
-            elseif ($state === 'not-started') {
-                $error = "Auction has not started yet. Cannot place bid.";
-            }
-            elseif ($state !== 'ongoing') {
-                $error = "Auction status is invalid. Cannot place bid.";
-            }
-            // Bid verification rules
-            elseif ($currentMax && $bidAmount <= $currentMax) {
-                $error = "Bid must be higher than current highest bid of $" . number_format($currentMax, 2) . ".";
-            }
-            elseif (!$currentMax && $bidAmount < $startingPrice) {
-                $error = "Bid must be at least the starting price of $" . number_format($startingPrice, 2) . ".";
-            } else {
-                // Attempt to place the bid
-                $insertSql = "INSERT INTO Bid (auctionId, buyerId, bidAmount, bidTime) VALUES (?, ?, ?, NOW())";
-                $stmt2 = mysqli_prepare($connection, $insertSql);
-                mysqli_stmt_bind_param($stmt2, 'iid', $auctionId, $buyerId, $bidAmount);
-                
-                if (mysqli_stmt_execute($stmt2)) {
-                    $success = true;
-                    mysqli_stmt_close($stmt2);
-                } else {
-                    $error = "Bid failed due to database error.";
-                }
-            }
-        }
-        mysqli_stmt_close($stmt);
-    }
-}
-
-// If bid was successful, redirect
-if ($success) {
-    header("Location: mybids.php?success=1&auction_id=" . $auctionId);
+if (!isset($_SESSION['account_type']) || $_SESSION['account_type'] !== 'buyer') {
+    $_SESSION['error'] = 'Only buyers can place bids';
+    header('Location: browse.php');
     exit;
 }
 
-// If it's a GET request or we need to show the form (after error)
-if ($_SERVER['REQUEST_METHOD'] === 'GET' || $error) {
-    // Get auction ID from GET parameters (for initial page load)
-    if (!$auctionId) {
-        $auctionId = intval($_GET['auction_id'] ?? 0);
+// Check if form was submitted
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Location: browse.php');
+    exit;
+}
+
+// Extract POST variables
+$auctionId = isset($_POST['auction_id']) ? (int)$_POST['auction_id'] : 0;
+$bidAmount = isset($_POST['bid_amount']) ? (int)$_POST['bid_amount'] : 0;
+$buyerId = (int)$_SESSION['user_id'];
+
+if ($auctionId <= 0 || $bidAmount <= 0) {
+    $_SESSION['error'] = 'Invalid auction or bid amount';
+    header('Location: listing.php?auctionId=' . $auctionId);
+    exit;
+}
+
+// Get auction details
+$stmt = $connection->prepare('SELECT startingPrice, endDate, state FROM Auction WHERE auctionId = ?');
+$stmt->bind_param('i', $auctionId);
+$stmt->execute();
+$result = $stmt->get_result();
+
+if ($result->num_rows === 0) {
+    $_SESSION['error'] = 'Auction not found';
+    $stmt->close();
+    header('Location: browse.php');
+    exit;
+}
+
+$auction = $result->fetch_assoc();
+$stmt->close();
+
+// Check if auction is ongoing
+$now = new DateTime();
+$endDate = new DateTime($auction['endDate']);
+
+if ($auction['state'] !== 'ongoing' || $now >= $endDate) {
+    $_SESSION['error'] = 'Bidding is not open for this auction';
+    header('Location: listing.php?auctionId=' . $auctionId);
+    exit;
+}
+
+// Get highest bid for this auction
+$stmt = $connection->prepare('SELECT MAX(bidAmount) as highestBid FROM Bid WHERE auctionId = ?');
+$stmt->bind_param('i', $auctionId);
+$stmt->execute();
+$result = $stmt->get_result();
+$bidData = $result->fetch_assoc();
+$stmt->close();
+
+$highestBid = $bidData['highestBid'];
+$startingPrice = (int)$auction['startingPrice'];
+
+// Determine minimum required bid
+if ($highestBid !== null) {
+    // There are existing bids - new bid must be at least highestBid + 1
+    $minimumBid = (int)$highestBid + 1;
+    if ($bidAmount < $minimumBid) {
+        $_SESSION['error'] = 'Bid must be at least $' . number_format($minimumBid, 2);
+        header('Location: listing.php?auctionId=' . $auctionId);
+        exit;
     }
-    
-    if ($auctionId <= 0) {
-        die('<div class="container alert alert-danger mt-3">Invalid auction ID.</div>');
+} else {
+    // No existing bids - new bid must be at least startingPrice + 1
+    $minimumBid = $startingPrice + 1;
+    if ($bidAmount < $minimumBid) {
+        $_SESSION['error'] = 'Bid must be at least $' . number_format($minimumBid, 2);
+        header('Location: listing.php?auctionId=' . $auctionId);
+        exit;
     }
-    
-    // Fetch auction details
-    $sql = "SELECT a.auctionId, i.name as itemName, a.startingPrice, a.reservePrice, a.state,
-                   (SELECT MAX(bidAmount) FROM Bid WHERE auctionId = a.auctionId) as currentPrice
-            FROM Auction a
-            JOIN Item i ON a.itemId = i.itemId
-            WHERE a.auctionId = ?";
-    
-    $stmt = mysqli_prepare($connection, $sql);
-    mysqli_stmt_bind_param($stmt, 'i', $auctionId);
-    mysqli_stmt_execute($stmt);
-    mysqli_stmt_bind_result($stmt, $auctionId, $itemName, $startingPrice, $reservePrice, $state, $currentPrice);
-    
-    if (!mysqli_stmt_fetch($stmt)) {
-        mysqli_stmt_close($stmt);
-        die('<div class="container alert alert-danger mt-3">Auction does not exist.</div>');
-    }
-    mysqli_stmt_close($stmt);
-    
-    // Calculation of the minimum bid displayed on the form
-    if ($currentPrice) {
-        $minBid = $currentPrice + 0.01;
-    } else {
-        $minBid = $startingPrice;
-    }
-    
-    $displayPrice = $currentPrice ?: $startingPrice;
-    
-    // Check if auction can accept bids
-    if ($state !== 'ongoing') {
-        // Display auction information but disable bidding
-        $bidDisabled = true;
-        switch ($state) {
-            case 'not-started':
-                $statusMessage = "Auction has not started yet.";
-                break;
-            case 'finished':
-                $statusMessage = "Auction has ended.";
-                break;
-            case 'cancelled':
-                $statusMessage = "Auction has been cancelled.";
-                break;
-            case 'expired':
-                $statusMessage = "Auction has expired.";
-                break;
-            default:
-                $statusMessage = "Auction is not available for bidding.";
-        }
-    } else {
-        $bidDisabled = false;
-        $statusMessage = "Auction is ongoing.";
-    }
+}
+
+// Insert the bid
+$stmt = $connection->prepare('INSERT INTO Bid (auctionId, buyerId, bidAmount, bidTime) VALUES (?, ?, ?, NOW())');
+$stmt->bind_param('iii', $auctionId, $buyerId, $bidAmount);
+
+if ($stmt->execute()) {
+    $_SESSION['success'] = 'Bid placed successfully!';
+    $stmt->close();
+    header('Location: listing.php?auctionId=' . $auctionId);
+    exit;
+} else {
+    $_SESSION['error'] = 'Failed to place bid. Please try again.';
+    $stmt->close();
+    header('Location: listing.php?auctionId=' . $auctionId);
+    exit;
 }
 ?>
-
-<div class="container">
-    <h2 class="my-3">Place a Bid</h2>
-    
-    <?php if ($error): ?>
-        <div class="alert alert-danger"><?php echo $error; ?></div>
-    <?php endif; ?>
-    
-    <div class="card">
-        <div class="card-body">
-            <h5 class="card-title"><?php echo htmlspecialchars($itemName); ?></h5>
-            <p class="card-text">
-                <strong>Current Price:</strong> $<?php echo number_format($displayPrice, 2); ?><br>
-                <strong>Starting Price:</strong> $<?php echo number_format($startingPrice, 2); ?><br>
-                <?php if ($reservePrice > 0): ?>
-                <strong>Reserve Price:</strong> $<?php echo number_format($reservePrice, 2); ?><br>
-                <?php endif; ?>
-                <strong>Minimum Bid:</strong> 
-                <?php 
-                if ($currentPrice) {
-                    echo "Higher than $" . number_format($currentPrice, 2);
-                } else {
-                    echo "At least $" . number_format($startingPrice, 2);
-                }
-                ?><br>
-                <strong>Auction Status:</strong> <?php echo $state; ?><br>
-                <strong>Status Message:</strong> <?php echo $statusMessage; ?>
-            </p>
-            
-            <?php if ($bidDisabled): ?>
-                <div class="alert alert-warning">
-                    Bidding is not available for this auction. 
-                    <a href="listing.php?item_id=<?php echo $auctionId; ?>" class="btn btn-secondary">View Auction Details</a>
-                </div>
-            <?php else: ?>
-                <form action="place_bid.php" method="POST">
-                    <input type="hidden" name="auction_id" value="<?php echo $auctionId; ?>">
-                    
-                    <div class="form-group">
-                        <label for="bid_amount">Bid Amount:</label>
-                        <div class="input-group">
-                            <div class="input-group-prepend">
-                                <span class="input-group-text">$</span>
-                            </div>
-                            <input type="number" class="form-control" id="bid_amount" name="bid_amount" 
-                                   min="<?php echo $minBid; ?>" step="0.01" 
-                                   value="<?php 
-                                       if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bid_amount'])) {
-                                           echo htmlspecialchars($_POST['bid_amount']);
-                                       } else {
-                                           echo number_format($minBid, 2, '.', '');
-                                       }
-                                   ?>" 
-                                   required>
-                        </div>
-                        <small class="form-text text-muted">
-                            <?php 
-                            if ($currentPrice) {
-                                echo "Bid must be higher than current highest bid of $" . number_format($currentPrice, 2);
-                            } else {
-                                echo "Bid must be at least the starting price of $" . number_format($startingPrice, 2);
-                            }
-                            ?>
-                        </small>
-                    </div>
-                    
-                    <button type="submit" class="btn btn-primary">Place Bid</button>
-                    <a href="listing.php?item_id=<?php echo $auctionId; ?>" class="btn btn-secondary">Cancel</a>
-                </form>
-            <?php endif; ?>
-        </div>
-    </div>
-</div>
-
-<?php include_once("footer.php"); ?>
