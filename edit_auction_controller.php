@@ -250,7 +250,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $reserveParam = ($posted['reservePrice'] === '' ? null : $posted['reservePrice']);
         $updAuction = mysqli_prepare($connection, 'UPDATE Auction SET startingPrice = ?, reservePrice = ?, startDate = ?, endDate = ?, state = ? WHERE auctionId = ?');
         if ($updAuction) {
-            mysqli_stmt_bind_param($updAuction, 'ddsssi', $posted['startingPrice'], $reserveParam, $sd, $ed, $state, $auctionId);
+            mysqli_stmt_bind_param($updAuction, 'iisssi', $posted['startingPrice'], $reserveParam, $sd, $ed, $state, $auctionId);
             if (!mysqli_stmt_execute($updAuction)) {
                 $error = 'Database error updating auction: ' . mysqli_error($connection);
             } else {
