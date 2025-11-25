@@ -35,7 +35,7 @@ CREATE TABLE Item (
     name VARCHAR(50) UNIQUE NOT NULL,
     `condition` ENUM('New', 'Like new', 'Excellent', 'Good', 'Fair', 'Poor') NOT NULL,
     description TEXT NOT NULL,
-    photo VARCHAR(255),
+    photo VARCHAR(255) NOT NULL,
     categoryId INT NOT NULL,
     FOREIGN KEY (categoryId) REFERENCES Category(categoryId)
         ON DELETE CASCADE
@@ -51,7 +51,6 @@ CREATE TABLE Auction (
     startDate DATETIME NOT NULL,
     endDate DATETIME NOT NULL,
     state ENUM('not-started','ongoing','finished','cancelled', 'expired') DEFAULT 'not-started',
-    finalPrice DECIMAL(10,2),
     FOREIGN KEY (sellerId) REFERENCES Seller(sellerId)
         ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY (itemId) REFERENCES Item(itemId)
