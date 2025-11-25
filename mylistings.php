@@ -6,15 +6,15 @@
 <h2 class="my-3">My listings</h2>
 
 <?php
-// Show cancel flash messages if present
+// Show flash messages if present
 if (session_status() === PHP_SESSION_NONE) session_start();
-if (!empty($_SESSION['cancel_success'])) {
-  echo '<div class="alert alert-success">' . htmlspecialchars($_SESSION['cancel_success']) . '</div>';
-  unset($_SESSION['cancel_success']);
+if (!empty($_SESSION['delete_success'])) {
+  echo '<div class="alert alert-success">' . htmlspecialchars($_SESSION['delete_success']) . '</div>';
+  unset($_SESSION['delete_success']);
 }
-if (!empty($_SESSION['cancel_error'])) {
-  echo '<div class="alert alert-danger">' . htmlspecialchars($_SESSION['cancel_error']) . '</div>';
-  unset($_SESSION['cancel_error']);
+if (!empty($_SESSION['delete_error'])) {
+  echo '<div class="alert alert-danger">' . htmlspecialchars($_SESSION['delete_error']) . '</div>';
+  unset($_SESSION['delete_error']);
 }
 ?>
 
@@ -65,12 +65,10 @@ if (!empty($_SESSION['cancel_error'])) {
               <p class="card-text">State: <?php echo htmlspecialchars($state); ?></p>
               <a href="listing.php?auctionId=<?php echo intval($auctionId); ?>" class="btn btn-primary">View</a>
               <a href="edit_auction.php?edit=<?php echo intval($auctionId); ?>" class="btn btn-secondary ml-2">Edit</a>
-              <?php if ($state !== 'cancelled' && $state !== 'finished'): ?>
-              <form method="POST" action="cancel_auction.php" class="d-inline-block ml-2" onsubmit="return confirm('Cancel this auction? This cannot be undone.');">
+              <form method="POST" action="delete_auction.php" class="d-inline-block ml-2" onsubmit="return confirm('Permanently delete this auction and item? This cannot be undone!');">
                 <input type="hidden" name="auctionId" value="<?php echo intval($auctionId); ?>">
-                <button type="submit" class="btn btn-danger">Cancel</button>
+                <button type="submit" class="btn btn-danger">Delete</button>
               </form>
-              <?php endif; ?>
             </div>
           </div>
         </div>
