@@ -153,7 +153,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($up->execute()) {
                 $up->close();
                 $base = strtok($_SERVER['REQUEST_URI'], '?');
-                header('Location: ' . $base . '?auctionId=' . $auctionId);
+                $redirectUrl = $base . '?auctionId=' . $auctionId;
+                if ($fromPage !== 'browse') {
+                    $redirectUrl .= '&from=' . urlencode($fromPage);
+                }
+                header('Location: ' . $redirectUrl);
                 exit;
             }
             $error = 'Failed to cancel auction';
@@ -175,7 +179,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($up->execute()) {
                 $up->close();
                 $base = strtok($_SERVER['REQUEST_URI'], '?');
-                header('Location: ' . $base . '?auctionId=' . $auctionId);
+                $redirectUrl = $base . '?auctionId=' . $auctionId;
+                if ($fromPage !== 'browse') {
+                    $redirectUrl .= '&from=' . urlencode($fromPage);
+                }
+                header('Location: ' . $redirectUrl);
                 exit;
             }
             $error = 'Failed to relist auction';
@@ -202,7 +210,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ins->bind_param('iid', $auctionId, $buyerId, $amount);
             if ($ins->execute()) {
                 $base = strtok($_SERVER['REQUEST_URI'], '?');
-                header('Location: ' . $base . '?auctionId=' . $auctionId);
+                $redirectUrl = $base . '?auctionId=' . $auctionId;
+                if ($fromPage !== 'browse') {
+                    $redirectUrl .= '&from=' . urlencode($fromPage);
+                }
+                header('Location: ' . $redirectUrl);
                 exit;
             } else {
                 $error = 'Failed to record bid';
