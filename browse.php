@@ -66,7 +66,7 @@ if ($categoriesResult) {
     </div>
 
     <!-- Search Bar with Better Spacing -->
-    <form method="get" action="browse.php" class="bg-white rounded-2xl p-6 mb-6 shadow-lg border border-gray-100">
+    <form method="get" action="browse.php" id="searchForm" class="bg-white rounded-2xl p-6 mb-6 shadow-lg border border-gray-100">
       <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
         
         <!-- Search Input -->
@@ -77,16 +77,19 @@ if ($categoriesResult) {
           <input
             type="text"
             name="keyword"
+            id="keywordInput"
             placeholder="Search for anything"
             value="<?php echo htmlspecialchars($keyword); ?>"
             class="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-900 placeholder-gray-500"
           />
         </div>
 
-        <!-- Status Filter -->
+        <!-- Status Filter - Auto-submit on change -->
         <div class="md:col-span-2 relative">
           <select
             name="status"
+            id="statusFilter"
+            onchange="this.form.submit()"
             class="appearance-none w-full pl-4 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer text-gray-700"
           >
             <option value="all" <?php echo $status_filter === 'all' ? 'selected' : ''; ?>>All Status</option>
@@ -99,10 +102,12 @@ if ($categoriesResult) {
           </svg>
         </div>
 
-        <!-- Sort Filter -->
+        <!-- Sort Filter - Auto-submit on change -->
         <div class="md:col-span-3 relative">
           <select
             name="order_by"
+            id="orderByFilter"
+            onchange="this.form.submit()"
             class="appearance-none w-full pl-4 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer text-gray-700"
           >
             <option value="ending-soon" <?php echo $order_by === 'ending-soon' ? 'selected' : ''; ?>>Soonest Expiry</option>
@@ -117,13 +122,16 @@ if ($categoriesResult) {
         </div>
 
         <!-- Hidden inputs for preserving filters -->
-        <input type="hidden" name="cat" value="<?php echo htmlspecialchars($category); ?>">
-        <input type="hidden" name="minPrice" value="<?php echo $minPrice; ?>">
-        <input type="hidden" name="maxPrice" value="<?php echo $maxPrice; ?>">
+        <input type="hidden" name="cat" id="catInput" value="<?php echo htmlspecialchars($category); ?>">
+        <input type="hidden" name="minPrice" id="minPriceInput" value="<?php echo $minPrice; ?>">
+        <input type="hidden" name="maxPrice" id="maxPriceInput" value="<?php echo $maxPrice; ?>">
 
-        <!-- Search Button -->
+        <!-- Search Button - Only for keyword search -->
         <div class="md:col-span-2">
-          <button type="submit" class="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl hover:shadow-lg hover:shadow-purple-500/30 transition-all whitespace-nowrap font-medium">
+          <button type="submit" class="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl hover:shadow-lg hover:shadow-purple-500/30 transition-all whitespace-nowrap font-medium flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
             Search
           </button>
         </div>
@@ -307,7 +315,8 @@ document.addEventListener('DOMContentLoaded', function() {
       a.endDate, 
       a.startingPrice,
       a.state,
-      c.name AS categoryName
+      c.name AS categoryName,
+      COALESCE((SELECT MAX(bidAmount) FROM Bid WHERE auctionId = a.auctionId), a.startingPrice) as currentBid
       FROM Auction a
       JOIN Item i ON a.itemId = i.itemId
       JOIN Category c ON i.categoryId = c.categoryId
@@ -336,102 +345,107 @@ document.addEventListener('DOMContentLoaded', function() {
       $types .= 's';
   }
 
+  // Price range filter - Using currentBid (MUST come after WHERE clause, before ORDER BY)
+  // We need to use HAVING clause since currentBid is calculated
+  $havingClauses = [];
+
   if ($minPrice > 0) {
-      $sql .= " AND a.startingPrice >= ?";
+      $havingClauses[] = "currentBid >= ?";
       $params[] = $minPrice;
       $types .= 'i';
   }
 
   if ($maxPrice < 999999) {
-      $sql .= " AND a.startingPrice <= ?";
+      $havingClauses[] = "currentBid <= ?";
       $params[] = $maxPrice;
       $types .= 'i';
   }
 
-  // Sorting
+  // Sorting - Using currentBid
   switch ($order_by) {
       case 'pricelow':
-          $sql .= " ORDER BY a.startingPrice ASC";
+          $orderClause = " ORDER BY currentBid ASC";
           break;
       case 'pricehigh':
-          $sql .= " ORDER BY a.startingPrice DESC";
+          $orderClause = " ORDER BY currentBid DESC";
           break;
       case 'newly-listed':
-          $sql .= " ORDER BY a.startDate DESC";
+          $orderClause = " ORDER BY a.startDate DESC";
           break;
       case 'ending-soon':
       default:
-          $sql .= " ORDER BY a.endDate ASC";
+          $orderClause = " ORDER BY a.endDate ASC";
           break;
   }
+
+  // Add HAVING clause if price filters exist
+  if (!empty($havingClauses)) {
+      $sql .= " HAVING " . implode(" AND ", $havingClauses);
+  }
+
+  // Add ORDER BY
+  $sql .= $orderClause;
 
   $stmt = mysqli_prepare($connection, $sql);
 
   if (!$stmt) {
-      echo '<div class="p-4 rounded-xl border border-red-200 bg-red-50 text-red-700">
-              Database error: ' . htmlspecialchars(mysqli_error($connection)) . '
-            </div>';
-  } else {
-      if (!empty($params)) {
-          mysqli_stmt_bind_param($stmt, $types, ...$params);
-      }
+    echo '<div class="p-4 rounded-xl border border-red-200 bg-red-50 text-red-700">
+            Database error: ' . htmlspecialchars(mysqli_error($connection)) . '
+          </div>';
+} else {
+    if (!empty($params)) {
+        mysqli_stmt_bind_param($stmt, $types, ...$params);
+    }
 
-      mysqli_stmt_execute($stmt);
-      $result = mysqli_stmt_get_result($stmt);
-      $rowCount = $result ? mysqli_num_rows($result) : 0;
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    $rowCount = $result ? mysqli_num_rows($result) : 0;
 
-      // Display result count
-      echo '<p class="text-gray-600 mb-6">
-              <span class="text-gray-900 font-semibold">' . $rowCount . '</span> ' . ($rowCount === 1 ? 'item' : 'items') . ' found
-            </p>';
+    // Display result count
+    echo '<p class="text-gray-600 mb-6">
+            <span class="text-gray-900 font-semibold">' . $rowCount . '</span> ' . ($rowCount === 1 ? 'item' : 'items') . ' found
+          </p>';
 
-if ($result && $rowCount > 0) {
-  echo '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">';
-  
-  while ($row = mysqli_fetch_assoc($result)) {
-      $description = strlen($row['description']) > 100 ? substr($row['description'], 0, 100) . '...' : $row['description'];
-      
-      // Get bid count
-      $bidCountQuery = "SELECT COUNT(*) as count FROM Bid WHERE auctionId = ?";
-      $bidStmt = mysqli_prepare($connection, $bidCountQuery);
-      mysqli_stmt_bind_param($bidStmt, 'i', $row['auctionId']);
-      mysqli_stmt_execute($bidStmt);
-      $bidResult = mysqli_stmt_get_result($bidStmt);
-      $bidRow = mysqli_fetch_assoc($bidResult);
-      $bidCount = $bidRow['count'] ?? 0;
-      mysqli_stmt_close($bidStmt);
-      
-      // Get current bid
-      $currentBidQuery = "SELECT MAX(bidAmount) as maxBid FROM Bid WHERE auctionId = ?";
-      $cbStmt = mysqli_prepare($connection, $currentBidQuery);
-      mysqli_stmt_bind_param($cbStmt, 'i', $row['auctionId']);
-      mysqli_stmt_execute($cbStmt);
-      $cbResult = mysqli_stmt_get_result($cbStmt);
-      $cbRow = mysqli_fetch_assoc($cbResult);
-      $currentBid = $cbRow['maxBid'] ?? $row['startingPrice'];
-      mysqli_stmt_close($cbStmt);
-      
-      // Get watchlist count
-      $watchQuery = "SELECT COUNT(*) as count FROM AuctionWatch WHERE auctionId = ?";
-      $wStmt = mysqli_prepare($connection, $watchQuery);
-      mysqli_stmt_bind_param($wStmt, 'i', $row['auctionId']);
-      mysqli_stmt_execute($wStmt);
-      $wResult = mysqli_stmt_get_result($wStmt);
-      $wRow = mysqli_fetch_assoc($wResult);
-      $watchlistCount = $wRow['count'] ?? 0;
-      mysqli_stmt_close($wStmt);
-      
-      // Check if current user is watching
-      $isWatching = false;
-      if (isset($_SESSION['account_type']) && $_SESSION['account_type'] === 'buyer' && isset($_SESSION['user_id'])) {
-          $checkWatchQuery = "SELECT * FROM AuctionWatch WHERE buyerId = ? AND auctionId = ?";
-          $checkWatchStmt = mysqli_prepare($connection, $checkWatchQuery);
-          mysqli_stmt_bind_param($checkWatchStmt, 'ii', $_SESSION['user_id'], $row['auctionId']);
-          mysqli_stmt_execute($checkWatchStmt);
-          $checkWatchResult = mysqli_stmt_get_result($checkWatchStmt);
-          $isWatching = mysqli_num_rows($checkWatchResult) > 0;
-          mysqli_stmt_close($checkWatchStmt);
-      }
+    if ($result && $rowCount > 0) {
+        echo '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">';
+        
+        while ($row = mysqli_fetch_assoc($result)) {
+            $description = strlen($row['description']) > 100 ? substr($row['description'], 0, 100) . '...' : $row['description'];
+            
+            // ✅ Use currentBid from query result (no need to fetch separately)
+            $currentBid = $row['currentBid'];
+            
+            // Get bid count
+            $bidCountQuery = "SELECT COUNT(*) as count FROM Bid WHERE auctionId = ?";
+            $bidStmt = mysqli_prepare($connection, $bidCountQuery);
+            mysqli_stmt_bind_param($bidStmt, 'i', $row['auctionId']);
+            mysqli_stmt_execute($bidStmt);
+            $bidResult = mysqli_stmt_get_result($bidStmt);
+            $bidRow = mysqli_fetch_assoc($bidResult);
+            $bidCount = $bidRow['count'] ?? 0;
+            mysqli_stmt_close($bidStmt);
+            
+            // Get watchlist count
+            $watchQuery = "SELECT COUNT(*) as count FROM AuctionWatch WHERE auctionId = ?";
+            $wStmt = mysqli_prepare($connection, $watchQuery);
+            mysqli_stmt_bind_param($wStmt, 'i', $row['auctionId']);
+            mysqli_stmt_execute($wStmt);
+            $wResult = mysqli_stmt_get_result($wStmt);
+            $wRow = mysqli_fetch_assoc($wResult);
+            $watchlistCount = $wRow['count'] ?? 0;
+            mysqli_stmt_close($wStmt);
+            
+            // Check if current user is watching
+            $isWatching = false;
+            if (isset($_SESSION['account_type']) && $_SESSION['account_type'] === 'buyer' && isset($_SESSION['user_id'])) {
+                $checkWatchQuery = "SELECT * FROM AuctionWatch WHERE buyerId = ? AND auctionId = ?";
+                $checkWatchStmt = mysqli_prepare($connection, $checkWatchQuery);
+                mysqli_stmt_bind_param($checkWatchStmt, 'ii', $_SESSION['user_id'], $row['auctionId']);
+                mysqli_stmt_execute($checkWatchStmt);
+                $checkWatchResult = mysqli_stmt_get_result($checkWatchStmt);
+                $isWatching = mysqli_num_rows($checkWatchResult) > 0;
+                mysqli_stmt_close($checkWatchStmt);
+            }
       
       // Image handling
       $imageUrl = 'https://via.placeholder.com/400x300?text=No+Image';
@@ -464,7 +478,7 @@ if ($result && $rowCount > 0) {
       <div class="bg-white rounded-2xl overflow-hidden border border-gray-200 hover:shadow-xl hover:border-purple-300 transition-all cursor-pointer group">
         
         <!-- Image -->
-        <div class="relative aspect-[4/3] bg-gray-100 overflow-hidden">
+        <div class="relative aspect-[16/9] bg-gray-100 overflow-hidden">
           <img
             src="<?php echo $imageUrl; ?>"
             alt="<?php echo htmlspecialchars($row['itemName']); ?>"
