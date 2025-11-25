@@ -226,7 +226,7 @@
             <label class="block text-gray-900 mb-2">Starting Bid *</label>
             <div class="relative">
               <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 text-xl">$</span>
-              <input type="number" name="startingPrice" min="0" step="0.01" required
+              <input type="number" name="startingPrice" min="0" step="1" required
                 value="<?php echo $startingPrice; ?>"
                 class="w-full pl-10 pr-4 py-3 border-2 border-green-300 rounded-xl">
             </div>
@@ -237,7 +237,7 @@
             <label class="block text-gray-900 mb-2">Reserve Price (Optional)</label>
             <div class="relative">
               <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 text-xl">$</span>
-              <input type="number" name="reservePrice" min="0" step="0.01"
+              <input type="number" name="reservePrice" min="0" step="1"
                 value="<?php echo $reservePrice; ?>"
                 class="w-full pl-10 pr-4 py-3 border-2 border-blue-300 rounded-xl">
             </div>

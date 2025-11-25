@@ -63,7 +63,7 @@ if (!empty($_SESSION['delete_error'])) {
               <p class="card-text">Start: <?php echo htmlspecialchars($startDate); ?> — End: <?php echo htmlspecialchars($endDate); ?></p>
               <p class="card-text">Starting: $<?php echo htmlspecialchars($startingPrice); ?> <?php if ($reservePrice) echo '(Reserve: $'.htmlspecialchars($reservePrice).')'; ?></p>
               <p class="card-text">State: <?php echo htmlspecialchars($state); ?></p>
-              <a href="listing.php?auctionId=<?php echo intval($auctionId); ?>" class="btn btn-primary">View</a>
+              <a href="listing.php?auctionId=<?php echo intval($auctionId); ?>&from=mylistings" class="btn btn-primary">View</a>
               <a href="edit_auction.php?edit=<?php echo intval($auctionId); ?>" class="btn btn-secondary ml-2">Edit</a>
               <form method="POST" action="delete_auction.php" class="d-inline-block ml-2" onsubmit="return confirm('Permanently delete this auction and item? This cannot be undone!');">
                 <input type="hidden" name="auctionId" value="<?php echo intval($auctionId); ?>">
