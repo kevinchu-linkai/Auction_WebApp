@@ -11,17 +11,15 @@
 </head>
 <body class="bg-gray-50">
 
-<header class="bg-white border-b border-gray-200">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <h1 class="text-xl font-semibold">Premium Auctions</h1>
-    </div>
-    </header>
-
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="mb-6">
         <?php if (isset($fromPage) && $fromPage === 'mylistings'): ?>
             <a href="mylistings.php" class="inline-flex items-center text-sm text-gray-600 hover:text-gray-800">
                 &larr;&nbsp;Back to My listings
+            </a>
+        <?php elseif (isset($fromPage) && $fromPage === 'watchlist'): ?>
+            <a href="watchlist.php" class="inline-flex items-center text-sm text-gray-600 hover:text-gray-800">
+                &larr;&nbsp;Back to Watchlist
             </a>
         <?php else: ?>
             <a href="browse.php" class="inline-flex items-center text-sm text-gray-600 hover:text-gray-800">

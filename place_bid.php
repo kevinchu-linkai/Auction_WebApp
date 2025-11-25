@@ -3,6 +3,7 @@
  * Place Bid - Handles bid submission
  * Validates bid amount and inserts into Bid table
  */
+date_default_timezone_set('Europe/London');
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
