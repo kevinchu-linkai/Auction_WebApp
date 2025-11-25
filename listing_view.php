@@ -17,6 +17,10 @@
             <a href="mylistings.php" class="inline-flex items-center text-sm text-gray-600 hover:text-gray-800">
                 &larr;&nbsp;Back to My listings
             </a>
+        <?php elseif (isset($fromPage) && $fromPage === 'watchlist'): ?>
+            <a href="watchlist.php" class="inline-flex items-center text-sm text-gray-600 hover:text-gray-800">
+                &larr;&nbsp;Back to Watchlist
+            </a>
         <?php else: ?>
             <a href="browse.php" class="inline-flex items-center text-sm text-gray-600 hover:text-gray-800">
                 &larr;&nbsp;Back to Browsing
