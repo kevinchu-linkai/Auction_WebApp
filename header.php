@@ -37,17 +37,24 @@ if ($connection instanceof mysqli) {
         // Optional: ensure MySQL timezone matches PHP timezone
         $connection->query("SET time_zone = '+00:00'");
 
-        // Auto update auction states
+        // Auto update auction states based on end date and highest bid vs reserve price
         $sql = "
-        UPDATE Auction
-        SET state = CASE
-            WHEN NOW() >= endDate AND (reservePrice IS NULL OR startingPrice >= reservePrice) THEN 'finished'
-            WHEN NOW() >= endDate THEN 'expired'
-            WHEN NOW() >= startDate AND NOW() < endDate THEN 'ongoing'
-            WHEN NOW() < startDate THEN 'not-started'
-            ELSE state
+        UPDATE Auction a
+        LEFT JOIN (
+            SELECT auctionId, MAX(bidAmount) as maxBid
+            FROM Bid
+            GROUP BY auctionId
+        ) b ON a.auctionId = b.auctionId
+        SET a.state = CASE
+            WHEN NOW() >= a.endDate AND a.state != 'cancelled' AND (
+                b.maxBid IS NOT NULL AND (b.maxBid >= COALESCE(a.reservePrice, 0))
+            ) THEN 'finished'
+            WHEN NOW() >= a.endDate AND a.state != 'cancelled' THEN 'expired'
+            WHEN NOW() >= a.startDate AND NOW() < a.endDate AND a.state != 'cancelled' THEN 'ongoing'
+            WHEN NOW() < a.startDate AND a.state != 'cancelled' THEN 'not-started'
+            ELSE a.state
         END
-        WHERE state <> 'cancelled';
+        WHERE a.state != 'cancelled';
         ";
 
         $result = $connection->query($sql);

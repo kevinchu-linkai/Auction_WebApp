@@ -9,13 +9,13 @@
 
 // Show cancel flash messages if present
 if (session_status() === PHP_SESSION_NONE) session_start();
-if (!empty($_SESSION['cancel_success'])) {
-  echo '<div class="alert alert-success">' . htmlspecialchars($_SESSION['cancel_success']) . '</div>';
-  unset($_SESSION['cancel_success']);
+if (!empty($_SESSION['delete_success'])) {
+  echo '<div class="alert alert-success">' . htmlspecialchars($_SESSION['delete_success']) . '</div>';
+  unset($_SESSION['delete_success']);
 }
-if (!empty($_SESSION['cancel_error'])) {
-  echo '<div class="alert alert-danger">' . htmlspecialchars($_SESSION['cancel_error']) . '</div>';
-  unset($_SESSION['cancel_error']);
+if (!empty($_SESSION['delete_error'])) {
+  echo '<div class="alert alert-danger">' . htmlspecialchars($_SESSION['delete_error']) . '</div>';
+  unset($_SESSION['delete_error']);
 }
 ?>
 
