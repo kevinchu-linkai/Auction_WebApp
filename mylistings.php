@@ -1,37 +1,20 @@
-<?php include_once("header.php")?>
-<?php require("utilities.php")?>
+<?php 
+include_once("header.php");
+require("utilities.php");
 
-<!-- 添加整体样式容器 -->
-<div class="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 p-6">
-<div class="max-w-7xl mx-auto">
-
-<!-- 修改标题部分 -->
-<div class="text-center mb-8">
-  <h1 class="text-gray-900 mb-3 text-3xl font-semibold">My Auction Listings</h1>
-  <p class="text-gray-600">Manage your auctions and track their performance</p>
-</div>
-
-<?php
-
-// Show cancel flash messages if present
-if (session_status() === PHP_SESSION_NONE) session_start();
-if (!empty($_SESSION['delete_success'])) {
-  echo '<div class="alert alert-success">' . htmlspecialchars($_SESSION['delete_success']) . '</div>';
-  unset($_SESSION['delete_success']);
-}
-if (!empty($_SESSION['delete_error'])) {
-  echo '<div class="alert alert-danger">' . htmlspecialchars($_SESSION['delete_error']) . '</div>';
-  unset($_SESSION['delete_error']);
-}
-?>
-
-<?php
   // This page is for showing a user the auction listings they've made.
   // It will be pretty similar to browse.php, except there is no search bar.
   // This can be started after browse.php is working with a database.
   // Feel free to extract out useful functions from browse.php and put them in
   // the shared "utilities.php" where they can be shared by multiple files.
-  
+
+// 错误报告开启以便调试
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// Show cancel flash messages if present
+if (session_status() === PHP_SESSION_NONE) session_start();
+
 // Insert Statistics Overview Component
 function renderStatsOverview($auctions) {
     $activeCount = 0;
@@ -56,7 +39,7 @@ function renderStatsOverview($auctions) {
         ['label' => 'Ended Auctions', 'value' => $endedCount, 'icon' => 'check-circle', 'color' => 'gray'],
         ['label' => 'Upcoming', 'value' => $upcomingCount, 'icon' => 'package', 'color' => 'blue'],
         ['label' => 'Cancelled', 'value' => $cancelledCount, 'icon' => 'x-circle', 'color' => 'red'],
-        ['label' => 'Total Bids', 'value' => $totalBids, 'icon' => 'trending-up', 'color' => 'purple']
+        ['label' => 'Total bids received', 'value' => $totalBids, 'icon' => 'trending-up', 'color' => 'purple']
     ];
     
     echo '<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">';
@@ -77,19 +60,8 @@ function renderStatsOverview($auctions) {
     echo '</div>';
 }
 
-  
-  // Check user is logged in and is a seller
-  if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    echo '<div class="alert alert-warning">Please <a href="login.php">sign in</a> to view your listings.</div>';
-  } elseif (!isset($_SESSION['account_type']) || $_SESSION['account_type'] !== 'seller') {
-    echo '<div class="alert alert-info">This page is for sellers only. Your account is not a seller.</div>';
-  } else {
-    $sellerId = $_SESSION['user_id'];
-
-    require_once 'database.php';
-
-    // Insert filter bar component function - indent one level within the else block
-    function renderFilterBar($filterStatus, $sortBy) {
+// Insert filter bar component function
+function renderFilterBar($filterStatus, $sortBy) {
     echo '
     <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100 mb-8">
         <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
@@ -129,8 +101,9 @@ function renderStatsOverview($auctions) {
         </div>
     </div>';
 }
-    // 拍卖卡片组件函数 - 与过滤栏同级缩进
-    function renderAuctionCard($auction) {
+
+// 拍卖卡片组件函数
+function renderAuctionCard($auction) {
     $status = $auction['state'];
     $statusColors = [
         'not-started' => 'bg-blue-100 text-blue-700',
@@ -139,16 +112,16 @@ function renderStatsOverview($auctions) {
         'cancelled' => 'bg-red-100 text-red-700',
         'expired' => 'bg-yellow-100 text-yellow-700'
     ];
-    
+
     $statusClass = $statusColors[$status] ?? 'bg-gray-100 text-gray-700';
     $statusLabel = ucfirst(str_replace('-', ' ', $status));
     $timeRemaining = getTimeRemaining($auction['endDate']);
-    
+
     echo '
     <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-all" 
-         data-status="' . $status . '" data-end-date="' . strtotime($auction['endDate']) . '"
-         data-bid-count="' . $auction['bidCount'] . '"
-         data-current-bid="' . $auction['currentBid'] . '">
+            data-status="' . $status . '" data-end-date="' . strtotime($auction['endDate']) . '"
+            data-bid-count="' . $auction['bidCount'] . '"
+            data-current-bid="' . $auction['currentBid'] . '">
         
         <!-- 卡片头部 -->
         <div class="p-6 border-b border-gray-100">
@@ -201,50 +174,73 @@ function renderStatsOverview($auctions) {
             <div class="flex gap-3">
                 <a href="listing.php?auctionId=' . $auction['auctionId'] . '&from=mylistings" 
                     class="flex-1 bg-gradient-to-r from-purple-500 to-blue-500 text-white text-center py-2.5 rounded-xl hover:shadow-lg transition-all font-medium">
-                    View Details
+                    View
                 </a>
                 <a href="edit_auction.php?edit=' . $auction['auctionId'] . '" 
-                   class="flex-1 bg-gray-100 text-gray-700 text-center py-2.5 rounded-xl hover:bg-gray-200 transition-all font-medium">
+                    class="flex-1 bg-gray-100 text-gray-700 text-center py-2.5 rounded-xl hover:bg-gray-200 transition-all font-medium">
                     Edit
-                </a>';
-                
-    if ($auction['state'] !== 'cancelled' && $auction['state'] !== 'finished' && $auction['state'] !== 'expired') {
-        echo '
-                <form method="POST" action="cancel_auction.php" class="flex-1" onsubmit="return confirm(\'Cancel this auction? This cannot be undone.\');">
+                </a>
+                <form method="POST" action="delete_auction.php" class="flex-1" onsubmit="return confirm(\'Permanently delete this auction and item? This cannot be undone!\');">
                     <input type="hidden" name="auctionId" value="' . $auction['auctionId'] . '">
                     <button type="submit" class="w-full bg-red-100 text-red-700 py-2.5 rounded-xl hover:bg-red-200 transition-all font-medium">
-                        Cancel
+                        Delete
                     </button>
-                </form>';
-    }
-    
-    echo '
+                </form>
             </div>
         </div>
     </div>';
 }
 
-    // 剩余时间计算函数 - 与拍卖卡片函数同级
-    function getTimeRemaining($endDate) {
-        $now = time();
-        $end = strtotime($endDate);
-        $diff = $end - $now;
-        
-        if ($diff < 0) return 'Ended';
-        
-        $days = floor($diff / (60 * 60 * 24));
-        $hours = floor(($diff % (60 * 60 * 24)) / (60 * 60));
-        
-        if ($days > 0) return $days . 'd ' . $hours . 'h';
-        return $hours . 'h';
-    }
+// 剩余时间计算函数
+function getTimeRemaining($endDate) {
+    $now = time();
+    $end = strtotime($endDate);
+    $diff = $end - $now;
+    
+    if ($diff < 0) return 'Ended';
+    
+    $days = floor($diff / (60 * 60 * 24));
+    $hours = floor(($diff % (60 * 60 * 24)) / (60 * 60));
+    
+    if ($days > 0) return $days . 'd ' . $hours . 'h';
+    return $hours . 'h';
+}
+?>
 
-    // 修改后的主逻辑 - 在else块内缩进一级
+<!-- 添加整体样式容器 -->
+<div class="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 p-6">
+<div class="max-w-7xl mx-auto">
+
+<!-- 修改标题部分 -->
+<div class="text-center mb-8">
+  <h1 class="text-gray-900 mb-3 text-3xl font-semibold">My Auction Listings</h1>
+  <p class="text-gray-600">Manage your auctions and track their performance</p>
+</div>
+
+<?php
+if (!empty($_SESSION['delete_success'])) {
+  echo '<div class="alert alert-success">' . htmlspecialchars($_SESSION['delete_success']) . '</div>';
+  unset($_SESSION['delete_success']);
+}
+if (!empty($_SESSION['delete_error'])) {
+  echo '<div class="alert alert-danger">' . htmlspecialchars($_SESSION['delete_error']) . '</div>';
+  unset($_SESSION['delete_error']);
+}
+  
+
+// Check user is logged in and is a seller
+if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
+    echo '<div class="alert alert-warning">Please <a href="login.php">sign in</a> to view your listings.</div>';
+} elseif (!isset($_SESSION['account_type']) || $_SESSION['account_type'] !== 'seller') {
+    echo '<div class="alert alert-info">This page is for sellers only. Your account is not a seller.</div>';
+} else {
+    $sellerId = $_SESSION['user_id'];
+    require_once 'database.php';
+
     $filterStatus = $_GET['filter'] ?? 'all';
     $sortBy = $_GET['sort'] ?? 'endDate';
 
-
-    // Fetch auctions for this seller, join to Item for the item name
+    // Fetch auctions for this seller
     $sql = "SELECT a.auctionId, a.itemId, i.name AS itemName, i.photo, a.startDate, a.endDate, 
                   a.startingPrice, a.reservePrice, a.state,
                   COUNT(b.bidId) as bidCount,
@@ -260,8 +256,6 @@ function renderStatsOverview($auctions) {
     if ($stmt) {
         mysqli_stmt_bind_param($stmt, 'i', $sellerId);
         mysqli_stmt_execute($stmt);
-        
-        //  使用mysqli_stmt_get_result获取结果集
         $result = mysqli_stmt_get_result($stmt);
         
         $allAuctions = [];
@@ -271,25 +265,21 @@ function renderStatsOverview($auctions) {
         
         $hasAny = count($allAuctions) > 0;
         
-        // 显示统计概览
         if ($hasAny) {
             renderStatsOverview($allAuctions);
         }
         
-        // 显示过滤栏
         renderFilterBar($filterStatus, $sortBy);
         
-        // 显示拍卖列表
         echo '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="auctions-container">';
         
         if ($hasAny) {
-            // 应用过滤和排序
+            // 过滤和排序逻辑
             $filteredAuctions = array_filter($allAuctions, function($auction) use ($filterStatus) {
                 if ($filterStatus === 'all') return true;
                 return $auction['state'] === $filterStatus;
             });
             
-            // 应用排序
             usort($filteredAuctions, function($a, $b) use ($sortBy) {
                 switch($sortBy) {
                     case 'endDate':
@@ -311,7 +301,6 @@ function renderStatsOverview($auctions) {
         }
         
         echo '</div>';
-        
         mysqli_stmt_close($stmt);
     } else {
         echo '<div class="alert alert-danger">Database error (prepare failed).</div>';
