@@ -11,6 +11,7 @@ require("utilities.php");
 // 错误报告开启以便调试
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
+date_default_timezone_set('Europe/London');
 
 // Show cancel flash messages if present
 if (session_status() === PHP_SESSION_NONE) session_start();
