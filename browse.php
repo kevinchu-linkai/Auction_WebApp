@@ -95,7 +95,7 @@ if ($categoriesResult) {
             <option value="all" <?php echo $status_filter === 'all' ? 'selected' : ''; ?>>All Status</option>
             <option value="ongoing" <?php echo $status_filter === 'ongoing' ? 'selected' : ''; ?>>Active</option>
             <option value="not-started" <?php echo $status_filter === 'not-started' ? 'selected' : ''; ?>>Upcoming</option>
-            <option value="finished" <?php echo $status_filter === 'finished' ? 'selected' : ''; ?>>Ended</option>
+
           </select>
           <svg class="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -320,13 +320,13 @@ document.addEventListener('DOMContentLoaded', function() {
       FROM Auction a
       JOIN Item i ON a.itemId = i.itemId
       JOIN Category c ON i.categoryId = c.categoryId
-      WHERE 1=1";
+      WHERE a.endDate > NOW()";
 
   $params = [];
   $types = '';
 
   if (!empty($keyword)) {
-      $sql .= " AND (i.name LIKE ? OR i.description LIKE ?)";
+      $sql .= " AND i.name LIKE ?";
       $keywordParam = '%' . $keyword . '%';
       $params[] = $keywordParam;
       $params[] = $keywordParam;

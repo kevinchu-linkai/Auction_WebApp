@@ -79,7 +79,62 @@ if ($connection instanceof mysqli) {
   <!-- Custom CSS -->
   <link rel="stylesheet" href="css/custom.css">
 
-  <title>Doodle Auctions</title>
+  <title>Monopoly</title>
+
+  <style>
+  /* Navigation bar styling to match browse page */
+  .navbar-dark.bg-dark {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Nav link hover styles */
+  .navbar-nav .nav-link {
+      position: relative;
+      transition: all 0.3s ease;
+      color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .navbar-nav .nav-link:hover {
+      color: #ffffff !important;
+      transform: translateY(-2px);
+  }
+
+  .navbar-nav .nav-link::after {
+      content: '';
+      position: absolute;
+      width: 0;
+      height: 2px;
+      bottom: 0;
+      left: 50%;
+      background-color: #ffffff;
+      transition: all 0.3s ease;
+      transform: translateX(-50%);
+  }
+
+  .navbar-nav .nav-link:hover::after {
+      width: 80%;
+  }
+
+  /* Special styling for Create Auction button */
+  .navbar-nav .nav-link.btn.border-light {
+      background-color: rgba(255, 255, 255, 0.1);
+      transition: all 0.3s ease;
+      border: 2px solid rgba(255, 255, 255, 0.5) !important;
+  }
+
+  .navbar-nav .nav-link.btn.border-light:hover {
+      background-color: rgba(255, 255, 255, 0.25);
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.6);
+      border-color: #ffffff !important;
+      transform: translateY(-2px) scale(1.05);
+  }
+
+  .navbar-nav .nav-link.btn.border-light:hover::after {
+      display: none;
+  }
+  </style>
+
 </head>
 
 <body>
@@ -87,7 +142,7 @@ if ($connection instanceof mysqli) {
 
 <!-- Navbars -->
 <nav class="navbar navbar-expand-lg navbar-light bg-light mx-2">
-  <a class="navbar-brand" href="#">Doodle</a>
+  <a class="navbar-brand" href="#">Monopoly</a>
   <ul class="navbar-nav ml-auto">
     <li class="nav-item">
 
