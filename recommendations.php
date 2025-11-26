@@ -2,6 +2,8 @@
 include_once("header.php");
 require("utilities.php");
 
+date_default_timezone_set('Europe/London');
+
 if (session_status() === PHP_SESSION_NONE) session_start();
 
 // Check if user is logged in and is a buyer
@@ -132,126 +134,254 @@ function getEndingSoonScore($connection, $auctionId) {
 }
 
 // Main recommendation query
-$recommendationQuery = "
-    SELECT 
-        a.auctionId,
-        i.name AS itemName,
-        i.description,
-        i.photo,
-        a.startDate,
-        a.endDate,
-        a.startingPrice,
-        a.state,
-        c.name AS categoryName,
-        COALESCE((SELECT MAX(bidAmount) FROM Bid WHERE auctionId = a.auctionId), a.startingPrice) as currentBid,
-        (SELECT COUNT(*) FROM Bid WHERE auctionId = a.auctionId) as bidCount,
-        (SELECT COUNT(*) FROM AuctionWatch WHERE auctionId = a.auctionId) as watchlistCount,
-        TIMESTAMPDIFF(HOUR, NOW(), a.endDate) as hoursRemaining
-    FROM Auction a
-    JOIN Item i ON a.itemId = i.itemId
-    JOIN Category c ON i.categoryId = c.categoryId
-    WHERE a.state = 'ongoing'
-    AND a.auctionId NOT IN (
-        SELECT auctionId FROM Bid WHERE buyerId = ?
-    )
-    AND a.endDate > NOW()
+//-----------------------------------------------------------
+// CHECK CACHE FIRST
+//-----------------------------------------------------------
+
+$useCachedRecommendations = false;
+$auctions = [];
+
+// Try to get cached recommendations (fresh within 1 hour)
+$cacheCheckQuery = "
+    SELECT COUNT(*) as count
+    FROM RecommendationCache
+    WHERE buyerId = ?
+    AND computedAt > DATE_SUB(NOW(), INTERVAL 1 HOUR)
 ";
 
-$params = [$buyerId];
-$types = 'i';
+$cacheCheckStmt = mysqli_prepare($connection, $cacheCheckQuery);
+mysqli_stmt_bind_param($cacheCheckStmt, 'i', $buyerId);
+mysqli_stmt_execute($cacheCheckStmt);
+$cacheCheckResult = mysqli_stmt_get_result($cacheCheckStmt);
+$cacheCheckRow = mysqli_fetch_assoc($cacheCheckResult);
+$cachedCount = $cacheCheckRow['count'];
+mysqli_stmt_close($cacheCheckStmt);
 
-// Apply filters
-if (!empty($keyword)) {
-    $recommendationQuery .= " AND (i.name LIKE ? OR i.description LIKE ?)";
-    $keywordParam = '%' . $keyword . '%';
-    $params[] = $keywordParam;
-    $params[] = $keywordParam;
-    $types .= 'ss';
-}
-
-if ($category !== 'all') {
-    $recommendationQuery .= " AND c.name = ?";
-    $params[] = $category;
-    $types .= 's';
-}
-
-if ($status_filter === 'ending-soon') {
-    $recommendationQuery .= " AND a.endDate <= DATE_ADD(NOW(), INTERVAL 24 HOUR)";
-}
-
-$recommendationQuery .= " LIMIT 50";
-
-$stmt = mysqli_prepare($connection, $recommendationQuery);
-if (!empty($params)) {
-    mysqli_stmt_bind_param($stmt, $types, ...$params);
-}
-mysqli_stmt_execute($stmt);
-$result = mysqli_stmt_get_result($stmt);
-
-// Calculate scores for each auction
-$auctions = [];
-$weights = [
-    'bid_history' => 0.35,
-    'watchlist' => 0.25,
-    'collaborative' => 0.20,
-    'trending' => 0.10,
-    'ending_soon' => 0.10,
-];
-
-while ($row = mysqli_fetch_assoc($result)) {
-    // Calculate hybrid score
-    $bidHistoryScore = getBidHistoryScore($connection, $row['auctionId'], $buyerId);
-    $watchlistScore = getWatchlistScore($connection, $row['auctionId'], $buyerId);
-    $collaborativeScore = getCollaborativeScore($connection, $row['auctionId'], $buyerId);
-    $trendingScore = getTrendingScore($connection, $row['auctionId']);
-    $endingSoonScore = getEndingSoonScore($connection, $row['auctionId']);
+if ($cachedCount > 0) {
+    // Use cached recommendations
+    echo "<!-- Using cached recommendations (cached items: $cachedCount, generated within last hour) -->";
     
-    // Normalize scores (0-10 scale)
-    $bidHistoryScore = min($bidHistoryScore * 2, 10);
-    $watchlistScore = min($watchlistScore * 2, 10);
-    $collaborativeScore = min($collaborativeScore, 10);
-    $trendingScore = min($trendingScore * 0.5, 10);
+    $cachedQuery = "
+        SELECT 
+            rc.score as recommendationScore,
+            rc.reason as recommendationReason,
+            rc.badge as recommendationBadge,
+            a.auctionId, 
+            i.name AS itemName, 
+            i.description, 
+            i.photo,
+            a.startDate, 
+            a.endDate, 
+            a.startingPrice,
+            a.state,
+            c.name AS categoryName,
+            COALESCE((SELECT MAX(bidAmount) FROM Bid WHERE auctionId = a.auctionId), a.startingPrice) as currentBid,
+            (SELECT COUNT(*) FROM Bid WHERE auctionId = a.auctionId) as bidCount,
+            (SELECT COUNT(*) FROM AuctionWatch WHERE auctionId = a.auctionId) as watchlistCount,
+            TIMESTAMPDIFF(HOUR, NOW(), a.endDate) as hoursRemaining
+        FROM RecommendationCache rc
+        JOIN Auction a ON rc.auctionId = a.auctionId
+        JOIN Item i ON a.itemId = i.itemId
+        JOIN Category c ON i.categoryId = c.categoryId
+        WHERE rc.buyerId = ?
+        AND a.state = 'ongoing'
+        AND a.endDate > NOW()
+    ";
     
-    $totalScore = 
-        ($bidHistoryScore * $weights['bid_history']) +
-        ($watchlistScore * $weights['watchlist']) +
-        ($collaborativeScore * $weights['collaborative']) +
-        ($trendingScore * $weights['trending']) +
-        ($endingSoonScore * $weights['ending_soon']);
+    $cachedParams = [$buyerId];
+    $cachedTypes = 'i';
     
-    // Determine recommendation reason
-    $reason = '';
-    $badge = '';
-    if ($bidHistoryScore > 7) {
-        $reason = 'Based on your bidding history';
-        $badge = '📊 For You';
-    } elseif ($watchlistScore > 7) {
-        $reason = 'Similar to items you\'re watching';
-        $badge = '👀 Recommended';
-    } elseif ($collaborativeScore > 5) {
-        $reason = 'Users like you are bidding';
-        $badge = '👥 Popular';
-    } elseif ($trendingScore > 5) {
-        $reason = 'Trending now';
-        $badge = '🔥 Hot';
-    } elseif ($endingSoonScore > 5) {
-        $reason = 'Ending soon';
-        $badge = '⏰ Last Chance';
-    } else {
-        $reason = 'Popular in ' . $row['categoryName'];
-        $badge = '✨ New';
+    // Apply filters to cached results
+    if (!empty($keyword)) {
+        $cachedQuery .= " AND (i.name LIKE ? OR i.description LIKE ?)";
+        $keywordParam = '%' . $keyword . '%';
+        $cachedParams[] = $keywordParam;
+        $cachedParams[] = $keywordParam;
+        $cachedTypes .= 'ss';
     }
     
-    $row['recommendationScore'] = $totalScore;
-    $row['recommendationReason'] = $reason;
-    $row['recommendationBadge'] = $badge;
+    if ($category !== 'all') {
+        $cachedQuery .= " AND c.name = ?";
+        $cachedParams[] = $category;
+        $cachedTypes .= 's';
+    }
     
-    $auctions[] = $row;
+    if ($status_filter === 'ending-soon') {
+        $cachedQuery .= " AND a.endDate <= DATE_ADD(NOW(), INTERVAL 24 HOUR)";
+    }
+    
+    $cachedQuery .= " ORDER BY rc.score DESC LIMIT 50";
+    
+    $cachedStmt = mysqli_prepare($connection, $cachedQuery);
+    if (!empty($cachedParams)) {
+        mysqli_stmt_bind_param($cachedStmt, $cachedTypes, ...$cachedParams);
+    }
+    mysqli_stmt_execute($cachedStmt);
+    $cachedResult = mysqli_stmt_get_result($cachedStmt);
+    
+    while ($row = mysqli_fetch_assoc($cachedResult)) {
+        $auctions[] = $row;
+    }
+    
+    mysqli_stmt_close($cachedStmt);
+    $useCachedRecommendations = true;
+    
+} else {
+    // Cache miss or stale - recalculate recommendations
+    echo "<!-- Cache miss or stale - recalculating recommendations... -->";
+    
+    // Main recommendation query (ORIGINAL CODE)
+    $recommendationQuery = "
+        SELECT 
+            a.auctionId,
+            i.name AS itemName,
+            i.description,
+            i.photo,
+            a.startDate,
+            a.endDate,
+            a.startingPrice,
+            a.state,
+            c.name AS categoryName,
+            COALESCE((SELECT MAX(bidAmount) FROM Bid WHERE auctionId = a.auctionId), a.startingPrice) as currentBid,
+            (SELECT COUNT(*) FROM Bid WHERE auctionId = a.auctionId) as bidCount,
+            (SELECT COUNT(*) FROM AuctionWatch WHERE auctionId = a.auctionId) as watchlistCount,
+            TIMESTAMPDIFF(HOUR, NOW(), a.endDate) as hoursRemaining
+        FROM Auction a
+        JOIN Item i ON a.itemId = i.itemId
+        JOIN Category c ON i.categoryId = c.categoryId
+        WHERE a.state = 'ongoing'
+        AND a.auctionId NOT IN (
+            SELECT auctionId FROM Bid WHERE buyerId = ?
+        )
+        AND a.endDate > NOW()
+    ";
+
+    $params = [$buyerId];
+    $types = 'i';
+
+    // Apply filters
+    if (!empty($keyword)) {
+        $recommendationQuery .= " AND (i.name LIKE ? OR i.description LIKE ?)";
+        $keywordParam = '%' . $keyword . '%';
+        $params[] = $keywordParam;
+        $params[] = $keywordParam;
+        $types .= 'ss';
+    }
+
+    if ($category !== 'all') {
+        $recommendationQuery .= " AND c.name = ?";
+        $params[] = $category;
+        $types .= 's';
+    }
+
+    if ($status_filter === 'ending-soon') {
+        $recommendationQuery .= " AND a.endDate <= DATE_ADD(NOW(), INTERVAL 24 HOUR)";
+    }
+
+    $recommendationQuery .= " LIMIT 50";
+
+    $stmt = mysqli_prepare($connection, $recommendationQuery);
+    if (!empty($params)) {
+        mysqli_stmt_bind_param($stmt, $types, ...$params);
+    }
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+
+    // Calculate scores for each auction
+    $weights = [
+        'bid_history' => 0.35,
+        'watchlist' => 0.25,
+        'collaborative' => 0.20,
+        'trending' => 0.10,
+        'ending_soon' => 0.10,
+    ];
+
+    while ($row = mysqli_fetch_assoc($result)) {
+        // Calculate hybrid score
+        $bidHistoryScore = getBidHistoryScore($connection, $row['auctionId'], $buyerId);
+        $watchlistScore = getWatchlistScore($connection, $row['auctionId'], $buyerId);
+        $collaborativeScore = getCollaborativeScore($connection, $row['auctionId'], $buyerId);
+        $trendingScore = getTrendingScore($connection, $row['auctionId']);
+        $endingSoonScore = getEndingSoonScore($connection, $row['auctionId']);
+        
+        // Normalize scores (0-10 scale)
+        $bidHistoryScore = min($bidHistoryScore * 2, 10);
+        $watchlistScore = min($watchlistScore * 2, 10);
+        $collaborativeScore = min($collaborativeScore, 10);
+        $trendingScore = min($trendingScore * 0.5, 10);
+        
+        $totalScore = 
+            ($bidHistoryScore * $weights['bid_history']) +
+            ($watchlistScore * $weights['watchlist']) +
+            ($collaborativeScore * $weights['collaborative']) +
+            ($trendingScore * $weights['trending']) +
+            ($endingSoonScore * $weights['ending_soon']);
+        
+        // Determine recommendation reason
+        $reason = '';
+        $badge = '';
+        if ($bidHistoryScore > 7) {
+            $reason = 'Based on your bidding history';
+            $badge = '📊 For You';
+        } elseif ($watchlistScore > 7) {
+            $reason = 'Similar to items you\'re watching';
+            $badge = '👀 Recommended';
+        } elseif ($collaborativeScore > 5) {
+            $reason = 'Users like you are bidding';
+            $badge = '👥 Popular';
+        } elseif ($trendingScore > 5) {
+            $reason = 'Trending now';
+            $badge = '🔥 Hot';
+        } elseif ($endingSoonScore > 5) {
+            $reason = 'Ending soon';
+            $badge = '⏰ Last Chance';
+        } else {
+            $reason = 'Popular in ' . $row['categoryName'];
+            $badge = '✨ New';
+        }
+        
+        $row['recommendationScore'] = $totalScore;
+        $row['recommendationReason'] = $reason;
+        $row['recommendationBadge'] = $badge;
+        
+        $auctions[] = $row;
+    }
+
+    mysqli_stmt_close($stmt);
+    
+    // STORE IN CACHE
+    echo "<!-- Storing recommendations in cache... -->";
+    
+    // Clear old cache for this buyer
+    $clearCacheQuery = "DELETE FROM RecommendationCache WHERE buyerId = ?";
+    $clearStmt = mysqli_prepare($connection, $clearCacheQuery);
+    mysqli_stmt_bind_param($clearStmt, 'i', $buyerId);
+    mysqli_stmt_execute($clearStmt);
+    mysqli_stmt_close($clearStmt);
+    
+    // Insert new recommendations into cache
+    foreach ($auctions as $auction) {
+        $insertCacheQuery = "
+            INSERT INTO RecommendationCache 
+            (buyerId, auctionId, score, reason, badge, computedAt)
+            VALUES (?, ?, ?, ?, ?, NOW())
+        ";
+        $insertStmt = mysqli_prepare($connection, $insertCacheQuery);
+        mysqli_stmt_bind_param($insertStmt, 'iidss', 
+            $buyerId, 
+            $auction['auctionId'], 
+            $auction['recommendationScore'],
+            $auction['recommendationReason'],
+            $auction['recommendationBadge']
+        );
+        mysqli_stmt_execute($insertStmt);
+        mysqli_stmt_close($insertStmt);
+    }
+    
+    echo "<!-- Cache stored successfully -->";
 }
 
-mysqli_stmt_close($stmt);
-
-// Sort by recommendation score
+// Sort by appropriate order
 if ($order_by === 'recommended') {
     usort($auctions, function($a, $b) {
         return $b['recommendationScore'] <=> $a['recommendationScore'];

@@ -10,6 +10,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     exit();
 }
 
+date_default_timezone_set('Europe/London');
 require_once 'database.php';
 ?>
 
