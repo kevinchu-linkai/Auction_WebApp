@@ -32,7 +32,7 @@ CREATE TABLE Category (
 
 CREATE TABLE Item (
     itemId INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(50) NOT NULL,
     `condition` ENUM('New', 'Like new', 'Excellent', 'Good', 'Fair', 'Poor') NOT NULL,
     description TEXT NOT NULL,
     photo VARCHAR(255) NOT NULL,
@@ -104,15 +104,3 @@ INSERT INTO Category (name) VALUES
 ('Books'),
 ('Jewelry');
 
-ALTER TABLE `Item` DROP INDEX `name`;
-ALTER TABLE Auction
-MODIFY COLUMN state 
-    ENUM('not-started', 'ongoing', 'finished', 'cancelled', 'expired')
-    DEFAULT 'not-started';
-
-ALTER TABLE Auction
-MODIFY COLUMN startingPrice DECIMAL(10,2) NOT NULL,
-MODIFY COLUMN reservePrice DECIMAL(10,2);
-
-ALTER TABLE Bid
-MODIFY COLUMN bidAmount DECIMAL(10,2) NOT NULL;

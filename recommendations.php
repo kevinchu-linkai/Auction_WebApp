@@ -797,32 +797,36 @@ document.addEventListener('DOMContentLoaded', function() {
     const toggleSearchBtn = document.getElementById('toggleSearchBtn');
     const closeSearchBtn = document.getElementById('closeSearchBtn');
     let lastScrollTop = 0;
-    let scrollTimeout;
+    let scrollVelocity = 0;
+    let isScrolling = false;
+    let animationFrame;
+    let accumulatedTransform = 0;
     
-    // Show/hide header based on scroll direction
+    // Track scroll velocity and position
     window.addEventListener('scroll', function() {
-        clearTimeout(scrollTimeout);
+        if (!isScrolling) {
+            isScrolling = true;
+            requestAnimationFrame(animateHeader);
+        }
+    }, { passive: true });
+    
+    function animateHeader() {
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
         
-        scrollTimeout = setTimeout(function() {
-            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-            
-            if (scrollTop > lastScrollTop && scrollTop > 100) {
-                // Scrolling down - hide header
-                if (header) {
-                    header.style.transform = 'translateY(-100%)';
-                    header.style.transition = 'transform 0.8s ease-in-out';
-                }
-            } else if (scrollTop < lastScrollTop + 100) {
-                // Scrolling up - show header
-                if (header) {
-                    header.style.transform = 'translateY(0)';
-                    header.style.transition = 'transform 1.3s ease-in-out';
-                }
+        if (header) {
+            if (scrollTop > 100) {
+                // Hide header when scrolled down
+                header.style.transform = 'translateY(-100%)';
+                header.style.transition = 'transform 0.3s ease-out';
+            } else {
+                // Show header when at top
+                header.style.transform = 'translateY(0)';
+                header.style.transition = 'transform 0.3s ease-out';
             }
-            
-            lastScrollTop = scrollTop <= 0 ? 0 : scrollTop;
-        }, 100);
-    }, false);
+        }
+        
+        isScrolling = false;
+    }
 });
 </script>
 

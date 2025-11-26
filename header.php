@@ -133,6 +133,24 @@ if ($connection instanceof mysqli) {
       display: none; /* Remove underline effect */
   }
 
+  /* Active nav link styles */
+  .navbar-nav .nav-link.active {
+      color: #ffffff !important;
+      background-color: rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+  }
+
+  .navbar-nav .nav-link.active::after {
+      width: 0;
+      /* or display: none; */
+  }
+
+  /* For Create Auction button when active */
+  .navbar-nav .nav-link.btn.border-light.active {
+      background-color: rgba(255, 255, 255, 0.3);
+      box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+  }
+
   /* Navigation bar styling to match browse page */
   .navbar-dark.bg-dark {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
@@ -192,6 +210,10 @@ if ($connection instanceof mysqli) {
 <!-- Auction state update runs silently; debug output removed -->
 
 <!-- Navbars -->
+ <?php
+// Get current page filename
+$current_page = basename($_SERVER['PHP_SELF']);
+?>
 <nav class="navbar navbar-light bg-light">
   <?php if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] == true): ?>
     <a class="navbar-brand" href="browse.php">Monopoly</a>
@@ -213,36 +235,29 @@ if ($connection instanceof mysqli) {
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
   <ul class="navbar-nav align-middle">
     <li class="nav-item mx-1">
-      <a class="nav-link" href="browse.php">Browse</a>
+      <a class="nav-link <?php echo ($current_page == 'browse.php') ? 'active' : ''; ?>" href="browse.php">Browse</a>
     </li>
-
 <?php if ($_SESSION['account_type'] === 'buyer'): ?>
     <li class="nav-item mx-1">
-      <a class="nav-link" href="mybids.php">My Bids</a>
+      <a class="nav-link <?php echo ($current_page == 'mybids.php') ? 'active' : ''; ?>" href="mybids.php">My Bids</a>
     </li>
-
     <li class="nav-item mx-1">
-      <a class="nav-link" href="watchlist.php">Watchlist</a>
+      <a class="nav-link <?php echo ($current_page == 'watchlist.php') ? 'active' : ''; ?>" href="watchlist.php">Watchlist</a>
     </li>
-
     <li class="nav-item mx-1">
-      <a class="nav-link" href="recommendations.php">Recommended</a>
+      <a class="nav-link <?php echo ($current_page == 'recommendations.php') ? 'active' : ''; ?>" href="recommendations.php">Recommended</a>
     </li>
 <?php endif; ?>
-
 <?php if ($_SESSION['account_type'] === 'seller'): ?>
     <li class="nav-item mx-1">
-      <a class="nav-link" href="mylistings.php">My Listings</a>
+      <a class="nav-link <?php echo ($current_page == 'mylistings.php') ? 'active' : ''; ?>" href="mylistings.php">My Listings</a>
     </li>
-
     <li class="nav-item mx-1">
-      <a class="nav-link" href="myreview.php">My Review</a>
+      <a class="nav-link <?php echo ($current_page == 'myreview.php') ? 'active' : ''; ?>" href="myreview.php">My Review</a>
     </li>
-
     <li class="nav-item ml-3">
-      <a class="nav-link btn border-light" href="create_auction.php">+ Create auction</a>
+      <a class="nav-link btn border-light <?php echo ($current_page == 'create_auction.php') ? 'active' : ''; ?>" href="create_auction.php">+ Create auction</a>
     </li>
 <?php endif; ?>
-
   </ul>
 </nav>
