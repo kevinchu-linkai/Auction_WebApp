@@ -25,6 +25,22 @@ if (isset($_GET['auctionId'])) {
 // Check where the user came from (for back button logic)
 $fromPage = $_GET['from'] ?? 'browse'; // default to 'browse'
 
+// If no 'from' parameter, try to detect from HTTP_REFERER
+if (!isset($_GET['from']) && isset($_SERVER['HTTP_REFERER'])) {
+    $referer = $_SERVER['HTTP_REFERER'];
+    if (strpos($referer, 'mylistings.php') !== false) {
+        $fromPage = 'mylistings';
+    } elseif (strpos($referer, 'mybids.php') !== false) {
+        $fromPage = 'mybids';
+    } elseif (strpos($referer, 'watchlist.php') !== false) {
+        $fromPage = 'watchlist';
+    } elseif (strpos($referer, 'recommendations.php') !== false) {
+        $fromPage = 'recommendations';
+    } else {
+        $fromPage = 'browse';
+    }
+}
+
 if ($auctionId <= 0) {
     http_response_code(400);
     ?>

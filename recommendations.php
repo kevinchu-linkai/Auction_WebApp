@@ -790,6 +790,42 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const header = document.querySelector('header');
+    const searchBar = document.getElementById('searchBar');
+    const toggleSearchBtn = document.getElementById('toggleSearchBtn');
+    const closeSearchBtn = document.getElementById('closeSearchBtn');
+    let lastScrollTop = 0;
+    let scrollTimeout;
+    
+    // Show/hide header based on scroll direction
+    window.addEventListener('scroll', function() {
+        clearTimeout(scrollTimeout);
+        
+        scrollTimeout = setTimeout(function() {
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            
+            if (scrollTop > lastScrollTop && scrollTop > 100) {
+                // Scrolling down - hide header
+                if (header) {
+                    header.style.transform = 'translateY(-100%)';
+                    header.style.transition = 'transform 0.8s ease-in-out';
+                }
+            } else if (scrollTop < lastScrollTop + 100) {
+                // Scrolling up - show header
+                if (header) {
+                    header.style.transform = 'translateY(0)';
+                    header.style.transition = 'transform 1.3s ease-in-out';
+                }
+            }
+            
+            lastScrollTop = scrollTop <= 0 ? 0 : scrollTop;
+        }, 100);
+    }, false);
+});
+</script>
+
 </body>
 </html>
 
