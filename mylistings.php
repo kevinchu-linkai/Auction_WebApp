@@ -32,10 +32,10 @@ function renderStatsOverview($auctions, $totalMoneyReceived) {
     }
     
     $stats = [
-        ['label' => 'Ongoing Auctions', 'value' => $activeCount, 'icon' => 'clock', 'color' => 'green'],
-        ['label' => 'Upcoming Auctions', 'value' => $upcomingCount, 'icon' => 'package', 'color' => 'blue'],
+        ['label' => 'Ongoing Auctions', 'value' => $activeCount, 'icon' => 'package', 'color' => 'blue'],
+        ['label' => 'Upcoming Auctions', 'value' => $upcomingCount, 'icon' => 'clock', 'color' => 'green'],
         ['label' => 'Cancelled', 'value' => $cancelledCount, 'icon' => 'x-circle', 'color' => 'red'],
-        ['label' => 'Completed Auctions', 'value' => $completedCount, 'icon' => 'check-circle', 'color' => 'gray'],
+        ['label' => 'Sold Auctions', 'value' => $completedCount, 'icon' => 'check-circle', 'color' => 'gray'],
         ['label' => 'Total Money Received', 'value' => '$' . number_format($totalMoneyReceived, 2), 'icon' => 'trending-up', 'color' => 'purple']
     ];
     
@@ -73,9 +73,9 @@ function renderFilterBar($filterStatus, $sortBy) {
                     <select class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white" 
                             id="filterStatus" onchange="applyFilters()">
                         <option value="all" ' . ($filterStatus === 'all' ? 'selected' : '') . '>All Auctions</option>
-                        <option value="not-started" ' . ($filterStatus === 'not-started' ? 'selected' : '') . '>Not Started</option>
+                        <option value="not-started" ' . ($filterStatus === 'not-started' ? 'selected' : '') . '>Upcoming</option>
                         <option value="ongoing" ' . ($filterStatus === 'ongoing' ? 'selected' : '') . '>Ongoing</option>
-                        <option value="finished" ' . ($filterStatus === 'finished' ? 'selected' : '') . '>Finished</option>
+                        <option value="finished" ' . ($filterStatus === 'finished' ? 'selected' : '') . '>Sold</option>
                         <option value="cancelled" ' . ($filterStatus === 'cancelled' ? 'selected' : '') . '>Cancelled</option>
                         <option value="expired" ' . ($filterStatus === 'expired' ? 'selected' : '') . '>Expired</option>
                     </select>
@@ -114,7 +114,7 @@ function renderAuctionCard($auction) {
     ];
 
     $statusClass = $statusColors[$status] ?? 'bg-gray-100 text-gray-700';
-    $statusLabel = ucfirst(str_replace('-', ' ', $status));
+    $statusLabel = $status === 'finished' ? 'Sold' : ucfirst(str_replace('-', ' ', $status));
     $timeRemaining = getTimeRemaining($auction['endDate']);
 
     echo '
@@ -129,12 +129,15 @@ function renderAuctionCard($auction) {
                 <h3 class="text-xl font-semibold text-gray-900">' . htmlspecialchars($auction['itemName']) . '</h3>
                 <span class="px-3 py-1 rounded-full text-xs font-medium ' . $statusClass . '">' . $statusLabel . '</span>
             </div>
+            <div class="mb-3">
+                <span class="px-2 py-1 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium">' . htmlspecialchars($auction['categoryName']) . '</span>
+            </div>
             <p class="text-gray-600 text-sm">Auction ID: ' . intval($auction['auctionId']) . '</p>
         </div>
 
         <!-- 价格信息 -->
         <div class="p-6">
-            ' . ($status === 'not-started' ? '
+            ' . ($status === 'not-started' || ($status === 'ongoing' && $auction['bidCount'] == 0) ? '
             <div class="mb-4">
                 <div class="text-sm text-gray-500 mb-1">Starting Bid</div>
                 <div class="text-2xl font-bold text-gray-900">$' . number_format($auction['startingPrice'], 2) . '</div>
@@ -241,11 +244,12 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 
     // Fetch auctions for this seller
     $sql = "SELECT a.auctionId, a.itemId, i.name AS itemName, i.photo, a.startDate, a.endDate, 
-                  a.startingPrice, a.reservePrice, a.state,
+                  a.startingPrice, a.reservePrice, a.state, c.name AS categoryName,
                   COUNT(b.bidId) as bidCount,
                   COALESCE(MAX(b.bidAmount), a.startingPrice) as currentBid
             FROM Auction a
             JOIN Item i ON a.itemId = i.itemId
+            LEFT JOIN Category c ON i.categoryId = c.categoryId
             LEFT JOIN Bid b ON a.auctionId = b.auctionId
             WHERE a.sellerId = ?
             GROUP BY a.auctionId
