@@ -3,6 +3,7 @@ session_start();
 require_once 'database.php';
 
 header('Content-Type: application/json');
+date_default_timezone_set('Europe/London');
 
 // Check if user is logged in and is a buyer
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
@@ -44,6 +45,13 @@ if ($isWatching) {
     mysqli_stmt_bind_param($deleteStmt, 'ii', $buyerId, $auctionId);
     
     if (mysqli_stmt_execute($deleteStmt)) {
+        // Invalidate recommendation cache
+        $invalidateCache = "DELETE FROM RecommendationCache WHERE buyerId = ?";
+        $invalidateStmt = mysqli_prepare($connection, $invalidateCache);
+        mysqli_stmt_bind_param($invalidateStmt, 'i', $buyerId);
+        mysqli_stmt_execute($invalidateStmt);
+        mysqli_stmt_close($invalidateStmt);
+        
         echo json_encode(['success' => true, 'watching' => false, 'message' => 'Removed from watchlist']);
     } else {
         echo json_encode(['success' => false, 'message' => 'Failed to remove from watchlist']);
@@ -56,10 +64,16 @@ if ($isWatching) {
     mysqli_stmt_bind_param($insertStmt, 'ii', $buyerId, $auctionId);
     
     if (mysqli_stmt_execute($insertStmt)) {
+        // Invalidate recommendation cache
+        $invalidateCache = "DELETE FROM RecommendationCache WHERE buyerId = ?";
+        $invalidateStmt = mysqli_prepare($connection, $invalidateCache);
+        mysqli_stmt_bind_param($invalidateStmt, 'i', $buyerId);
+        mysqli_stmt_execute($invalidateStmt);
+        mysqli_stmt_close($invalidateStmt);
+        
         echo json_encode(['success' => true, 'watching' => true, 'message' => 'Added to watchlist']);
     } else {
         echo json_encode(['success' => false, 'message' => 'Failed to add to watchlist']);
     }
-    mysqli_stmt_close($insertStmt);
 }
 ?>

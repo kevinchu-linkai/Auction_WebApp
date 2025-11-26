@@ -98,6 +98,13 @@ if ($highestBid !== null) {
 
 // Insert the bid
 $stmt = $connection->prepare('INSERT INTO Bid (auctionId, buyerId, bidAmount, bidTime) VALUES (?, ?, ?, NOW())');
+
+$invalidateCache = "DELETE FROM RecommendationCache WHERE buyerId = ?";
+$invalidateStmt = mysqli_prepare($connection, $invalidateCache);
+mysqli_stmt_bind_param($invalidateStmt, 'i', $buyerId);
+mysqli_stmt_execute($invalidateStmt);
+mysqli_stmt_close($invalidateStmt);
+
 $stmt->bind_param('iii', $auctionId, $buyerId, $bidAmount);
 
 if ($stmt->execute()) {
