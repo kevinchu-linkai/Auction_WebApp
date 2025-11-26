@@ -25,6 +25,10 @@
             <a href="mybids.php" class="inline-flex items-center text-sm text-gray-600 hover:text-gray-800">
                 &larr;&nbsp;Back to My Bids
             </a>
+        <?php elseif (isset($fromPage) && $fromPage === 'recommendations'): ?>
+            <a href="recommendations.php" class="inline-flex items-center text-sm text-gray-600 hover:text-gray-800">
+                &larr;&nbsp;Back to Recommendations
+            </a>
         <?php else: ?>
             <a href="browse.php" class="inline-flex items-center text-sm text-gray-600 hover:text-gray-800">
                 &larr;&nbsp;Back to Browsing
