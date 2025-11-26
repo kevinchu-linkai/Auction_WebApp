@@ -180,10 +180,11 @@ function renderAuctionCard($auction) {
                     class="flex-1 bg-gradient-to-r from-purple-500 to-blue-500 text-white text-center py-2.5 rounded-xl hover:shadow-lg transition-all font-medium">
                     View
                 </a>
+                ' . ($status === 'not-started' ? '
                 <a href="edit_auction.php?edit=' . $auction['auctionId'] . '" 
                     class="flex-1 bg-gray-100 text-gray-700 text-center py-2.5 rounded-xl hover:bg-gray-200 transition-all font-medium">
                     Edit
-                </a>
+                </a>' : '') . '
                 <form method="POST" action="delete_auction.php" class="flex-1" onsubmit="return confirm(\'Permanently delete this auction and item? This cannot be undone!\');">
                     <input type="hidden" name="auctionId" value="' . $auction['auctionId'] . '">
                     <button type="submit" class="w-full bg-red-100 text-red-700 py-2.5 rounded-xl hover:bg-red-200 transition-all font-medium">
