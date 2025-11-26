@@ -79,26 +79,133 @@ if ($connection instanceof mysqli) {
   <!-- Custom CSS -->
   <link rel="stylesheet" href="css/custom.css">
 
-  <title>Doodle Auctions</title>
+  <title>Monopoly</title>
+
+  <style>
+  .navbar-light.bg-light {
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .navbar-light .navbar-brand {
+      color: #667eea !important;
+      font-weight: bold;
+      font-size: 1.5rem;
+  }
+
+  .navbar-light .navbar-brand:hover {
+      color: #764ba2 !important;
+  }
+
+  .navbar-light .navbar-nav .nav-link {
+      color: #667eea !important;
+      font-weight: 500;
+      padding: 8px 16px;
+      border-radius: 20px;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+      z-index: 1;
+  }
+
+  .navbar-light .navbar-nav .nav-link::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      transition: left 0.4s ease;
+      z-index: -1;
+      border-radius: 20px;
+  }
+
+  .navbar-light .navbar-nav .nav-link:hover {
+      color: #ffffff !important;
+  }
+
+  .navbar-light .navbar-nav .nav-link:hover::before {
+      left: 0;
+  }
+
+  .navbar-light .navbar-nav .nav-link:hover::after {
+      display: none; /* Remove underline effect */
+  }
+
+  /* Navigation bar styling to match browse page */
+  .navbar-dark.bg-dark {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Nav link hover styles */
+  .navbar-nav .nav-link {
+      position: relative;
+      transition: all 0.3s ease;
+      color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .navbar-nav .nav-link:hover {
+      color: #ffffff !important;
+      transform: translateY(-2px);
+  }
+
+  .navbar-nav .nav-link::after {
+      content: '';
+      position: absolute;
+      width: 0;
+      height: 2px;
+      bottom: 0;
+      left: 50%;
+      background-color: #ffffff;
+      transition: all 0.3s ease;
+      transform: translateX(-50%);
+  }
+
+  .navbar-nav .nav-link:hover::after {
+      width: 80%;
+  }
+
+  /* Special styling for Create Auction button */
+  .navbar-nav .nav-link.btn.border-light {
+      background-color: rgba(255, 255, 255, 0.1);
+      transition: all 0.3s ease;
+      border: 2px solid rgba(255, 255, 255, 0.5) !important;
+  }
+
+  .navbar-nav .nav-link.btn.border-light:hover {
+      background-color: rgba(255, 255, 255, 0.25);
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.6);
+      border-color: #ffffff !important;
+      transform: translateY(-2px) scale(1.05);
+  }
+
+  .navbar-nav .nav-link.btn.border-light:hover::after {
+      display: none;
+  }
+  </style>
+
 </head>
 
 <body>
 <!-- Auction state update runs silently; debug output removed -->
 
 <!-- Navbars -->
-<nav class="navbar navbar-expand-lg navbar-light bg-light mx-2">
-  <a class="navbar-brand" href="#">Doodle</a>
-  <ul class="navbar-nav ml-auto">
+<nav class="navbar navbar-light bg-light">
+  <?php if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] == true): ?>
+    <a class="navbar-brand" href="browse.php">Monopoly</a>
+  <?php else: ?>
+    <a class="navbar-brand" href="index.php">Monopoly</a>
+  <?php endif; ?>
+  
+  <ul class="navbar-nav ml-auto flex-row">
     <li class="nav-item">
-
-<?php
-if ($_SESSION['logged_in'] === true) {
-    echo '<a class="nav-link" href="logout.php">Logout</a>';
-} else {
-    echo '<a class="nav-link" href="login.php">Login</a>';
-}
-?>
-
+      <?php if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] == true): ?>
+        <a class="nav-link" href="logout.php">Logout</a>
+      <?php else: ?>
+        <a class="nav-link" href="login.php">Login</a>
+      <?php endif; ?>
     </li>
   </ul>
 </nav>

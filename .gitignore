@@ -1,0 +1,28 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+
+# Composer vendor (if you ever use composer)
+vendor/
+
+# Environment files (credentials)
+.env
+.env.*
+
+# Logs
+*.log
+logs/
+php_errors.log
+
+# Uploads (do NOT commit user-uploaded images)
+img/uploads/
+img/uploads/*
+
+# Cache
+cache/
+tmp/
