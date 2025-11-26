@@ -20,8 +20,8 @@ logs/
 php_errors.log
 
 # Uploads (do NOT commit user-uploaded images)
-img/uploads/
 img/uploads/*
+!img/uploads/.gitkeep
 
 # Cache
 cache/
