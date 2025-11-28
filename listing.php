@@ -12,7 +12,7 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 // include DB connection (expects $connection = mysqli_connect(...))
 require_once __DIR__ . '/database.php';
 
-// read auction id (accept camelCase `auctionId`, snake_case `auction_id`, or `id`)
+// Read auction ID (accept camelCase `auctionId`, snake_case `auction_id`, or `id`)
 $auctionId = 0;
 if (isset($_GET['auctionId'])) {
     $auctionId = (int) $_GET['auctionId'];
@@ -57,10 +57,10 @@ if ($auctionId <= 0) {
     exit;
 }
 
-// convenience
+// Database connection convenience fallback
 $connection = $GLOBALS['connection'] ?? ($connection ?? null);
 if (!($connection instanceof mysqli)) {
-    // try variable name 'conn' fallback
+    // Try variable name 'conn' fallback
     if (isset($conn) && $conn instanceof mysqli) $connection = $conn;
 }
 if (!($connection instanceof mysqli)) {
@@ -115,14 +115,23 @@ if ($sellerIdForInfo > 0) {
      if ($rating === null) $rating = 0;
 }
 
-// parse times and state
+// Parse times and state
 // `dbState` is the authoritative state stored in the Auction table.
 $dbState = $row['state'];
 $sellerId = isset($row['sellerId']) ? (int)$row['sellerId'] : 0;
+$reservePrice = array_key_exists('reservePrice', $row) ? (int)$row['reservePrice'] : null;
 $auctionStartTime = strtotime($row['startDate']);
 $auctionEndTime = strtotime($row['endDate']);
 
-// derive a display status from timestamps to handle small clock drifts / DB state lag
+// Get current highest bid (needed for status determination)
+$stmt = $connection->prepare('SELECT MAX(bidAmount) AS maxBid FROM Bid WHERE auctionId = ?');
+$stmt->bind_param('i', $auctionId);
+$stmt->execute();
+$r = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+$maxBid = $r['maxBid'] !== null ? (int)$r['maxBid'] : null;
+
+// Derive a display status from timestamps to handle small clock drifts / DB state lag
 $now_ts = time();
 
 // Prefer a timestamp-derived display status so the UI reflects the real-time schedule
@@ -136,24 +145,27 @@ if ($dbState === 'cancelled') {
     } elseif ($now_ts >= $auctionStartTime && $now_ts < $auctionEndTime) {
         $displayStatus = 'ongoing';
     } elseif ($now_ts >= $auctionEndTime) {
-        $displayStatus = 'expired';
+        // Auction has ended - determine if finished or expired based on bids and reserve price
+        if ($maxBid === null) {
+            // No bids placed
+            $displayStatus = 'expired';
+        } else {
+            // Has bids - check if highest bid meets reserve price
+            if ($reservePrice === null || $maxBid >= $reservePrice) {
+                $displayStatus = 'finished';
+            } else {
+                $displayStatus = 'expired';
+            }
+        }
     } else {
-        // fallback to DB state if timestamps are missing/unparseable
+        // Fallback to DB state if timestamps are missing/unparseable
         $displayStatus = $dbState;
     }
 }
-
-// get current highest bid
-$stmt = $connection->prepare('SELECT MAX(bidAmount) AS maxBid FROM Bid WHERE auctionId = ?');
-$stmt->bind_param('i', $auctionId);
-$stmt->execute();
-$r = $stmt->get_result()->fetch_assoc();
-$stmt->close();
-$maxBid = $r['maxBid'] !== null ? (int)$r['maxBid'] : null;
 $startingPrice = isset($row['startingPrice']) ? (int)$row['startingPrice'] : 0;
 $currentBid = $maxBid !== null ? $maxBid : $startingPrice;
 
-// handle POST actions (relist or place bid)
+// Handle POST actions (relist or place bid)
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Cancel action
@@ -184,7 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     // Relist action
     elseif (isset($_POST['relist'])) {
-        // Basic authorization: must be logged in as seller and auction currently cancelled
+        // Basic authorization: must be logged in as seller and auction currently in cancelled state
         $isSeller = isset($_SESSION['account_type']) && $_SESSION['account_type'] === 'seller';
         // If your session stores seller id separately, adjust mapping here
         if ($dbState === 'cancelled' && $isSeller) {
@@ -263,7 +275,7 @@ while ($br = $res->fetch_assoc()) {
 }
 $stmt->close();
 
-// template variables
+// Template variables
 $title = $row['item_name'];
 $description = $row['description'];
 $item_condition = $row['item_condition'] ?? '';
@@ -271,7 +283,6 @@ $current_price = $currentBid;
 $num_bids = count($bids);
 $bidHistory = $bids;
 $minBid = $currentBid + 1;
-$reservePrice = array_key_exists('reservePrice', $row) ? (int)$row['reservePrice'] : null;
 $photo = $row['photo'] ?? '';
 $photoUrl = $photo ? $photo : 'https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?w=800&q=80';
 
