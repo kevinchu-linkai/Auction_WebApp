@@ -55,10 +55,10 @@ if (!in_array($userType, ['buyer', 'seller'], true)) {
 
 // Choose table and SQL
 if ($userType === 'seller') {
-    $checkSql = 'SELECT sellerId FROM Seller WHERE email = ? OR username = ? LIMIT 1';
+    $checkSql = 'SELECT sellerId FROM Seller WHERE email = ? LIMIT 1';
     $insertSql = 'INSERT INTO Seller (username, email, password) VALUES (?, ?, ?)';
 } else {
-    $checkSql = 'SELECT buyerId FROM Buyer WHERE email = ? OR username = ? LIMIT 1';
+    $checkSql = 'SELECT buyerId FROM Buyer WHERE email = ? LIMIT 1';
     $insertSql = 'INSERT INTO Buyer (username, email, password) VALUES (?, ?, ?)';
 }
 
@@ -70,12 +70,12 @@ if (!$stmt) {
     exit;
 }
 
-mysqli_stmt_bind_param($stmt, 'ss', $email, $username);
+mysqli_stmt_bind_param($stmt, 's', $email);
 mysqli_stmt_execute($stmt);
 mysqli_stmt_store_result($stmt);
 if (mysqli_stmt_num_rows($stmt) > 0) {
     mysqli_stmt_close($stmt);
-    $_SESSION['reg_error'] = 'An account with that email or username already exists.';
+    $_SESSION['reg_error'] = 'An account with that email already exists.';
     header('Location: register.php');
     exit;
 }
