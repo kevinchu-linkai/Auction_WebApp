@@ -46,8 +46,8 @@ CREATE TABLE Auction (
     auctionId INT AUTO_INCREMENT PRIMARY KEY,
     sellerId INT NOT NULL,
     itemId INT NOT NULL,
-    startingPrice DECIMAL(10,2) NOT NULL,
-    reservePrice DECIMAL(10,2),
+    startingPrice INT NOT NULL,
+    reservePrice INT,
     startDate DATETIME NOT NULL,
     endDate DATETIME NOT NULL,
     state ENUM('not-started','ongoing','finished','cancelled', 'expired') DEFAULT 'not-started',
@@ -61,7 +61,7 @@ CREATE TABLE Bid (
     bidId INT AUTO_INCREMENT PRIMARY KEY,
     auctionId INT NOT NULL,
     buyerId INT NOT NULL,
-    bidAmount DECIMAL(10,2) NOT NULL,
+    bidAmount INT NOT NULL,
     bidTime DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (auctionId) REFERENCES Auction(auctionId)
         ON UPDATE CASCADE ON DELETE CASCADE,
@@ -118,3 +118,6 @@ CREATE TABLE `RecommendationCache` (
   FOREIGN KEY (`buyerId`) REFERENCES `Buyer`(`buyerId`) ON DELETE CASCADE,
   FOREIGN KEY (`auctionId`) REFERENCES `Auction`(`auctionId`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE Auction 
+ADD COLUMN notificationSent TINYINT(1) DEFAULT 0 AFTER state;

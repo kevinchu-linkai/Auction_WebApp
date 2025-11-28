@@ -328,10 +328,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   if (!empty($keyword)) {
       $sql .= " AND i.name LIKE ?";
-      $keywordParam = '%' . $keyword . '%';
-      $params[] = $keywordParam;
-      $params[] = $keywordParam;
-      $types .= 'ss';
+      $params[] = '%' . $keyword . '%';
+      $types .= 's';
   }
 
   if ($category !== 'all') {

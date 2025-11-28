@@ -9,6 +9,8 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+require_once 'config.php';
+require_once 'utils/email_notifications.php';
 require_once 'database.php';
 
 // Check if user is logged in as buyer
@@ -108,6 +110,37 @@ mysqli_stmt_close($invalidateStmt);
 $stmt->bind_param('iii', $auctionId, $buyerId, $bidAmount);
 
 if ($stmt->execute()) {
+    // Get the ID of the bid we just inserted
+    $new_bid_id = $connection->insert_id;
+    
+    // Check if this bid outbid another buyer
+    $checkOutbidSql = "SELECT b.bidId 
+                       FROM Bid b
+                       WHERE b.auctionId = ? 
+                       AND b.bidAmount < ?
+                       AND b.buyerId != ?
+                       ORDER BY b.bidAmount DESC 
+                       LIMIT 1";
+    
+    $checkStmt = $connection->prepare($checkOutbidSql);
+    $checkStmt->bind_param('idi', $auctionId, $bidAmount, $buyerId);
+    $checkStmt->execute();
+    $outbidResult = $checkStmt->get_result();
+    
+    // If someone was outbid, send them an email notification
+    if ($outbidResult->num_rows > 0) {
+        $outbidRow = $outbidResult->fetch_assoc();
+        try {
+            $emailer = new EmailNotifications();
+            // Use $conn from config.php for the email notification
+            $emailer->notifyOutbid($conn, $outbidRow['bidId']);
+        } catch (Exception $e) {
+            // Log error but don't stop the bid process
+            error_log("Failed to send outbid email: " . $e->getMessage());
+        }
+    }
+    $checkStmt->close();
+    
     $_SESSION['success'] = 'Bid placed successfully!';
     $stmt->close();
     header('Location: listing.php?auctionId=' . $auctionId);

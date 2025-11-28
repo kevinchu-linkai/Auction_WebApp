@@ -1,0 +1,38 @@
+Run the following for cron setting:
+
+crontab -e
+
+*/5 * * * * /Applications/XAMPP/bin/php /Applications/XAMPP/xamppfiles/htdocs/Auction_WebApp/cron/check_expired_auctions.php >> /Applications/XAMPP/xamppfiles/htdocs/Auction_WebApp/cron/cron.log 2>&1
+
+Save and exit:
+
+Press i to enter insert mode
+Paste the line
+Press ESC
+Type :wq
+Press ENTER
+
+crontab -l
+
+After 5 minutes, check if the cron job ran:
+
+cat /Applications/XAMPP/xamppfiles/htdocs/Auction_WebApp/cron/cron.log
+
+
+Run the following for the composer:
+
+export PATH="/Applications/XAMPP/bin:$PATH"
+php -v
+
+cd /Applications/XAMPP/xamppfiles/htdocs/Auction_WebApp
+curl -sS https://getcomposer.org/installer | /Applications/XAMPP/bin/php
+
+/Applications/XAMPP/bin/php composer.phar require phpmailer/phpmailer
+
+ls -la
+
+You should see:
+
+vendor/ folder
+composer.json file
+composer.lock file
