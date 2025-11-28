@@ -51,6 +51,7 @@ CREATE TABLE Auction (
     startDate DATETIME NOT NULL,
     endDate DATETIME NOT NULL,
     state ENUM('not-started','ongoing','finished','cancelled', 'expired') DEFAULT 'not-started',
+    notificationSent TINYINT(1) DEFAULT 0,
     FOREIGN KEY (sellerId) REFERENCES Seller(sellerId)
         ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY (itemId) REFERENCES Item(itemId)
@@ -118,6 +119,3 @@ CREATE TABLE `RecommendationCache` (
   FOREIGN KEY (`buyerId`) REFERENCES `Buyer`(`buyerId`) ON DELETE CASCADE,
   FOREIGN KEY (`auctionId`) REFERENCES `Auction`(`auctionId`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-ALTER TABLE Auction 
-ADD COLUMN notificationSent TINYINT(1) DEFAULT 0 AFTER state;
