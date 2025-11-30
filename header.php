@@ -222,14 +222,19 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <a class="navbar-brand" href="index.php">Monopoly</a>
   <?php endif; ?>
   
-  <ul class="navbar-nav ml-auto flex-row">
-    <li class="nav-item">
-      <?php if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] == true): ?>
+  <ul class="navbar-nav ml-auto flex-row align-items-center">
+    <?php if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] == true): ?>
+      <li class="nav-item">
+        <span class="nav-link text-muted" style="cursor: default; pointer-events: none;">Hi, <?= ucfirst(htmlspecialchars($_SESSION['account_type'])) ?></span>
+      </li>
+      <li class="nav-item">
         <a class="nav-link" href="logout.php">Logout</a>
-      <?php else: ?>
+      </li>
+    <?php else: ?>
+      <li class="nav-item">
         <a class="nav-link" href="login.php">Login</a>
-      <?php endif; ?>
-    </li>
+      </li>
+    <?php endif; ?>
   </ul>
 </nav>
 
