@@ -533,14 +533,9 @@ document.addEventListener('DOMContentLoaded', function() {
             <?php echo htmlspecialchars($row['itemName']); ?>
           </h3>
           <p class="text-sm text-gray-500 mb-4"><?php echo htmlspecialchars($row['categoryName']); ?></p>
-          <?php foreach ($allCategories as $cat): ?>
-          <a href="browse.php?cat=<?= urlencode($cat['name']) ?>" class="pill <?= (isset($_GET['cat']) && $_GET['cat'] == $cat['name']) ? 'active' : '' ?>">
-              <?= htmlspecialchars($cat['name']) ?>
-          </a>
-          <?php endforeach; ?>
 
           <div class="mb-4">
-            <p class="text-xs text-gray-500 mb-1">Current Bid:</p>
+            <p class="text-xs text-gray-500 mb-1"><?php echo $bidCount > 0 ? 'Current Bid:' : 'Starting Price:'; ?></p>
             <p class="text-2xl font-bold text-green-600">$<?php echo number_format($currentBid, 2); ?></p>
           </div>
 
