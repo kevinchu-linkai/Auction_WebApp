@@ -306,6 +306,14 @@ document.addEventListener('DOMContentLoaded', function() {
 <main class="max-w-7xl mx-auto px-6 lg:px-8 py-8">
   
   <?php
+  // Fetch ALL categories for pills display
+  $categoryQuery = "SELECT categoryId, name FROM Category ORDER BY name";
+  $categoryResult = mysqli_query($connection, $categoryQuery);
+  $allCategories = [];
+  while ($row = mysqli_fetch_assoc($categoryResult)) {
+      $allCategories[] = $row;
+  }
+
   // Build query with filters
   $sql = "SELECT 
       a.auctionId, 
@@ -525,6 +533,11 @@ document.addEventListener('DOMContentLoaded', function() {
             <?php echo htmlspecialchars($row['itemName']); ?>
           </h3>
           <p class="text-sm text-gray-500 mb-4"><?php echo htmlspecialchars($row['categoryName']); ?></p>
+          <?php foreach ($allCategories as $cat): ?>
+          <a href="browse.php?cat=<?= urlencode($cat['name']) ?>" class="pill <?= (isset($_GET['cat']) && $_GET['cat'] == $cat['name']) ? 'active' : '' ?>">
+              <?= htmlspecialchars($cat['name']) ?>
+          </a>
+          <?php endforeach; ?>
 
           <div class="mb-4">
             <p class="text-xs text-gray-500 mb-1">Current Bid:</p>
