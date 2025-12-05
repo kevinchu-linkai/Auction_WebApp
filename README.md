@@ -2,8 +2,6 @@
 
 A full-featured online auction platform built with PHP and MySQL, featuring real-time bidding, user authentication, watchlists, seller reviews, and automated email notifications.
 
-![Auction Platform](img/banner.png)
-
 ## ✨ Features
 
 ### Core Functionality
