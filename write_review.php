@@ -1,5 +1,5 @@
 <?php
-
+session_start();
 require_once __DIR__ . '/database.php';
 
 $rating = isset($_POST['rating']) ? (int)$_POST['rating'] : 0;

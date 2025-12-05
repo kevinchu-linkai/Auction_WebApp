@@ -26,7 +26,7 @@
     <?php endif; ?>
 
     <form method="POST" enctype="multipart/form-data" class="space-y-5">
-        <input type="hidden" name="removePhoto" id="removePhoto" value="0">
+        
         <!-- single shared file input (kept outside labels to avoid double-trigger) -->
         <input
             type="file"
@@ -57,13 +57,7 @@
                         <label id="changeImageBtn" class="flex-1 py-2 text-center bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition-colors">
                             Change
                         </label>
-                        <button
-                            type="button"
-                            id="removeImageBtn"
-                            class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                        >
-                            Remove
-                        </button>
+
                     </div>
                 </div>
 
